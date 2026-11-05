@@ -20,7 +20,7 @@ export default function App() {
   const [entries, setEntries] = useState<Entry[]>(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') as Entry[] } catch { return [] }
   })
-  const [scans, setScans] = useState<ScanRecord[]>([])
+  const [scans, setScans] = useState<ScanRecord[]>(() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY + '-scans') || '[]') as ScanRecord[] } catch { return [] } })
   const [titleDraft, setTitleDraft] = useState('')
   const [recognizedText, setRecognizedText] = useState('')
   const [query, setQuery] = useState('')
@@ -36,7 +36,8 @@ export default function App() {
   const workerRef = useRef<OcrWorker | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)) }, [entries])
+  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)) } catch { setError('Não foi possível salvar o protocolo neste aparelho. Exporte o Excel para não perder os dados.') } }, [entries])
+  useEffect(() => { try { localStorage.setItem(STORAGE_KEY + '-scans', JSON.stringify(scans)) } catch { /* histórico complementar */ } }, [scans])
 
   // Attach the stream only after React has rendered the video element.
   useEffect(() => {
@@ -84,7 +85,7 @@ export default function App() {
       // Enlarge and improve contrast so small printed letters are easier to read.
       const imageBlob = source instanceof Blob ? source : await (await fetch(source)).blob()
       const bitmap = await createImageBitmap(imageBlob)
-      const scale = Math.max(2, Math.min(3, 1800 / bitmap.width))
+      const scale = Math.min(2.5, 2200 / bitmap.width)
       const canvas = document.createElement('canvas')
       canvas.width = Math.round(bitmap.width * scale)
       canvas.height = Math.round(bitmap.height * scale)
@@ -146,7 +147,7 @@ export default function App() {
       return
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 }, aspectRatio: { ideal: 16 / 9 } }, audio: false })
       streamRef.current = stream
       setCameraOpen(true)
     } catch {
@@ -221,39 +222,46 @@ export default function App() {
   async function exportExcel() {
     if (!entries.length) { setError('Adicione pelo menos uma APR antes de exportar.'); return }
     setError('')
-    const sorted = [...entries].sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'))
-    const { default: ExcelJS } = await import('exceljs')
-    const workbook = new ExcelJS.Workbook()
-    workbook.creator = 'PROTOCOLO FAST'
-    workbook.created = new Date()
-    const protocol = workbook.addWorksheet('Protocolo')
-    protocol.columns = [
-      { header: 'Nº', key: 'number', width: 8 },
-      { header: 'Título / Nome da APR', key: 'title', width: 58 },
-      { header: 'Quantidade', key: 'quantity', width: 14 },
-    ]
-    sorted.forEach((item, index) => protocol.addRow({ number: index + 1, title: item.title, quantity: item.count }))
-    protocol.getRow(1).font = { bold: true }
-    protocol.views = [{ state: 'frozen', ySplit: 1 }]
-    if (scans.length) {
-      const history = workbook.addWorksheet('Leituras')
-      history.columns = [
+    try {
+      const sorted = [...entries].sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'))
+      const { default: ExcelJS } = await import('exceljs')
+      const workbook = new ExcelJS.Workbook()
+      workbook.creator = 'PROTOCOLO FAST'
+      workbook.created = new Date()
+      const protocol = workbook.addWorksheet('Protocolo')
+      protocol.columns = [
         { header: 'Nº', key: 'number', width: 8 },
-        { header: 'Título reconhecido', key: 'title', width: 58 },
-        { header: 'Data e hora', key: 'date', width: 24 },
+        { header: 'Título / Nome da APR', key: 'title', width: 58 },
+        { header: 'Quantidade', key: 'quantity', width: 14 },
       ]
-      scans.forEach((item, index) => history.addRow({ number: index + 1, title: item.title, date: new Date(item.date).toLocaleString('pt-BR') }))
-      history.getRow(1).font = { bold: true }
-      history.views = [{ state: 'frozen', ySplit: 1 }]
+      sorted.forEach((item, index) => protocol.addRow({ number: index + 1, title: item.title, quantity: item.count }))
+      protocol.getRow(1).font = { bold: true }
+      protocol.views = [{ state: 'frozen', ySplit: 1 }]
+      if (scans.length) {
+        const history = workbook.addWorksheet('Leituras')
+        history.columns = [
+          { header: 'Nº', key: 'number', width: 8 },
+          { header: 'Título reconhecido', key: 'title', width: 58 },
+          { header: 'Data e hora', key: 'date', width: 24 },
+        ]
+        scans.forEach((item, index) => history.addRow({ number: index + 1, title: item.title, date: new Date(item.date).toLocaleString('pt-BR') }))
+        history.getRow(1).font = { bold: true }
+        history.views = [{ state: 'frozen', ySplit: 1 }]
+      }
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `PROTOCOLO-FAST-${new Date().toISOString().slice(0,10)}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500)
+      setStatus('Planilha Excel gerada com sucesso.')
+    } catch (e) {
+      setError(e instanceof Error ? `Falha ao gerar Excel: ${e.message}` : 'Não foi possível gerar o Excel. Tente novamente.')
     }
-    const buffer = await workbook.xlsx.writeBuffer()
-    const blob = new Blob([buffer as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `PROTOCOLO-FAST-${new Date().toISOString().slice(0,10)}.xlsx`
-    link.click()
-    URL.revokeObjectURL(url)
   }
 
   return (
@@ -287,13 +295,13 @@ export default function App() {
           <button className="capture-card" onClick={() => fileRef.current?.click()} disabled={busy}>
             <span className="capture-icon"><ImagePlus size={25} /></span><strong>ENVIAR FOTO</strong><small>Escolher da galeria ou arquivos</small><span className="card-arrow">↗</span>
           </button>
-          <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={event => void handleFile(event.target.files?.[0])} />
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={event => void handleFile(event.target.files?.[0])} />
         </div>
         {cameraError && <div className="notice error"><AlertCircle size={17}/>{cameraError}</div>}
         {cameraOpen && <div className="camera-panel">
           <div className="camera-head"><strong><Camera size={17}/> CÂMERA ATIVA</strong><button className="icon-button" onClick={closeCamera} aria-label="Fechar câmera"><X size={19}/></button></div>
           <div className="camera-view"><video ref={videoRef} autoPlay playsInline muted /><div className="scan-overlay"><div className="scan-window"><span>ALINHE A LINHA TAREFA AQUI</span></div></div></div>
-          <p>Posicione a linha inteira que vem depois de TAREFA dentro da faixa central. O restante da foto será ignorado.</p>
+          <p className="camera-tip">Gire o celular na horizontal. Enquadre toda a linha que vem depois de TAREFA na faixa laranja. O restante da imagem será ignorado.</p>
           <button className="action-button full" onClick={() => void capturePhoto()}><Camera size={18}/> CAPTURAR FOTO</button>
         </div>}
         {busy && <div className="processing"><LoaderCircle className="spin" size={20}/><div><strong>{status || 'Processando imagem…'}</strong><div className="progress"><span style={{ width: progress + '%' }}/></div></div><b>{progress}%</b></div>}

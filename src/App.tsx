@@ -7,6 +7,7 @@ import {
 
 type Entry = { id: string; title: string; count: number; createdAt: string }
 type ScanRecord = { id: string; title: string; date: string }
+type OcrWorker = Awaited<ReturnType<typeof import('tesseract.js').createWorker>>
 
 const STORAGE_KEY = 'protocolo-fast-v1'
 
@@ -32,7 +33,7 @@ export default function App() {
   const [expanded, setExpanded] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const workerRef = useRef<Awaited<ReturnType<typeof createWorker>> | null>(null)
+  const workerRef = useRef<OcrWorker | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)) }, [entries])

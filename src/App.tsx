@@ -79,7 +79,7 @@ export default function App() {
     return workerRef.current
   }
 
-  async function recognize(source: Blob | string) {
+  async function recognize(source: Blob | string, mode: 'task-row' | 'full-page' = 'full-page') {
     setBusy(true); setError(''); setProgress(0); setRecognizedText(''); setTitleDraft('')
     try {
       const worker = await getWorker()
@@ -88,24 +88,28 @@ export default function App() {
       // Enlarge and improve contrast so small printed letters are easier to read.
       const imageBlob = source instanceof Blob ? source : await (await fetch(source)).blob()
       const bitmap = await createImageBitmap(imageBlob)
-      const scale = Math.min(2.5, 2200 / bitmap.width)
+      const scale = Math.min(2, 1800 / bitmap.width)
       const canvas = document.createElement('canvas')
       canvas.width = Math.round(bitmap.width * scale)
       canvas.height = Math.round(bitmap.height * scale)
-      const ctx = canvas.getContext('2d', { willReadFrequently: true })
+      const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('Não foi possível preparar a imagem.')
+      // Browser-native image enhancement avoids a slow per-pixel JavaScript loop.
+      ctx.filter = 'grayscale(1) contrast(1.45) brightness(1.08)'
       ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      ctx.filter = 'none'
       bitmap.close()
-      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      for (let i = 0; i < pixels.data.length; i += 4) {
-        const gray = Math.min(255, Math.max(0, (pixels.data[i] * 0.299 + pixels.data[i + 1] * 0.587 + pixels.data[i + 2] * 0.114 - 128) * 1.35 + 128))
-        pixels.data[i] = gray
-        pixels.data[i + 1] = gray
-        pixels.data[i + 2] = gray
-      }
-      ctx.putImageData(pixels, 0, 0)
 
-      setStatus('Localizando o campo TAREFA…')
+      setStatus(mode === 'task-row' ? 'Lendo a linha da TAREFA…' : 'Localizando a linha TAREFA na APR…')
+      // Use single-line segmentation for the camera strip and sparse text for full-page photos.
+      // Disable dictionary correction so technical APR terms are not replaced by common words.
+      const parameters = {
+        tessedit_pageseg_mode: mode === 'task-row' ? '7' : '11',
+        load_system_dawg: '0',
+        load_freq_dawg: '0',
+        preserve_interword_spaces: '1',
+      }
+      await (worker as unknown as { setParameters: (value: Record<string, string>) => Promise<void> }).setParameters(parameters)
       const result = await worker.recognize(canvas)
       const lines: string[] = result.data.text
         .split(/\r?\n/)
@@ -115,7 +119,7 @@ export default function App() {
       // Never select an arbitrary long line: only accept text anchored to the TAREFA label.
       const taskLine = lines.find(line => {
         const normalized = line.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
-        return /T[A4]REF[A4]/.test(normalized)
+        return /T\\s*[A4]\\s*R\\s*[E3]\\s*F\\s*[A4]/.test(normalized)
       })
       if (!taskLine) {
         setRecognizedText('')
@@ -192,13 +196,13 @@ export default function App() {
     if (!ctx) return
     ctx.drawImage(full, 0, sourceY, fullWidth, bandHeight, 0, 0, fullWidth, bandHeight)
     closeCamera()
-    canvas.toBlob(blob => { if (blob) void recognize(blob) }, 'image/jpeg', 0.96)
+    canvas.toBlob(blob => { if (blob) void recognize(blob, 'task-row') }, 'image/jpeg', 0.96)
   }
   async function handleFile(file?: File) {
     if (!file) return
     if (!file.type.startsWith('image/')) { setError('Selecione uma imagem JPG, PNG ou WEBP.'); return }
     if (file.size > 15 * 1024 * 1024) { setError('A imagem deve ter no máximo 15 MB.'); return }
-    await recognize(file)
+    await recognize(file, 'full-page')
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -321,7 +325,7 @@ export default function App() {
         {cameraOpen && <div className="camera-panel">
           <div className="camera-head"><strong><Camera size={17}/> CÂMERA ATIVA</strong><button className="icon-button" onClick={closeCamera} aria-label="Fechar câmera"><X size={19}/></button></div>
           <div className={`camera-view${portraitFeed ? " rotate-feed" : ""}`}><video ref={videoRef} autoPlay playsInline muted /><div className="scan-overlay"><div className="scan-window"><span>ALINHE A LINHA TAREFA AQUI</span></div></div></div>
-          <p className="camera-tip">Gire o celular na horizontal. Enquadre toda a linha que vem depois de TAREFA na faixa laranja. O restante da imagem será ignorado.</p>
+          <p className="camera-tip">Enquadre a linha inteira, incluindo a palavra TAREFA e todo o texto ao lado, dentro da faixa laranja.</p>
           <button className="action-button full" onClick={() => void capturePhoto()}><Camera size={18}/> CAPTURAR FOTO</button>
         </div>}
         {busy && <div className="processing"><LoaderCircle className="spin" size={20}/><div><strong>{status || 'Processando imagem…'}</strong><div className="progress"><span style={{ width: progress + '%' }}/></div></div><b>{progress}%</b></div>}

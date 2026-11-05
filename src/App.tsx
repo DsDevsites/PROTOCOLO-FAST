@@ -3,7 +3,7 @@ import { createWorker } from 'tesseract.js'
 import * as XLSX from 'xlsx'
 import {
   AlertCircle, Camera, Check, CheckCircle2, ChevronDown, ChevronUp, ClipboardList,
-  Download, FileImage, ImagePlus, LoaderCircle, Minus, Plus, RotateCcw, Search,
+  Download, ImagePlus, LoaderCircle, Minus, Plus, RotateCcw, Search,
   ShieldCheck, Trash2, X, Zap
 } from 'lucide-react'
 

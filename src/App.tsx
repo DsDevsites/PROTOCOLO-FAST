@@ -37,6 +37,22 @@ export default function App() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)) }, [entries])
+
+  // Attach the stream only after React has rendered the video element.
+  useEffect(() => {
+    if (!cameraOpen || !videoRef.current || !streamRef.current) return
+    const video = videoRef.current
+    video.srcObject = streamRef.current
+    video.muted = true
+    video.playsInline = true
+    void video.play().catch(() => {
+      setCameraError('A câmera foi autorizada, mas o navegador não iniciou o vídeo. Feche a câmera e tente novamente.')
+    })
+    return () => {
+      video.pause()
+      video.srcObject = null
+    }
+  }, [cameraOpen])
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach(track => track.stop())
     void workerRef.current?.terminate()
@@ -85,7 +101,6 @@ export default function App() {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
       streamRef.current = stream
       setCameraOpen(true)
-      requestAnimationFrame(() => { if (videoRef.current) videoRef.current.srcObject = stream })
     } catch {
       setCameraError('Não foi possível abrir a câmera. Verifique a permissão do navegador ou envie uma foto da galeria.')
     }

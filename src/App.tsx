@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createWorker } from 'tesseract.js'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import {
   AlertCircle, Camera, Check, CheckCircle2, ChevronDown, ChevronUp, ClipboardList,
   Download, ImagePlus, LoaderCircle, Minus, Plus, RotateCcw, Search,
@@ -151,17 +151,41 @@ export default function App() {
     if (!entries.length || !window.confirm('Apagar todo o protocolo atual? Esta ação não pode ser desfeita.')) return
     setEntries([]); setScans([]); setRecognizedText(''); setTitleDraft(''); setError(''); setStatus('')
   }
-  function exportExcel() {
+  async function exportExcel() {
     if (!entries.length) { setError('Adicione pelo menos uma APR antes de exportar.'); return }
+    setError('')
     const sorted = [...entries].sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'))
-    const protocol = sorted.map((item, index) => ({ Nº: index + 1, 'Título / Nome da APR': item.title, Quantidade: item.count }))
-    const workbook = XLSX.utils.book_new()
-    const sheet = XLSX.utils.json_to_sheet(protocol)
-    sheet['!cols'] = [{ wch: 8 }, { wch: 58 }, { wch: 14 }]
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Protocolo')
-    const history = scans.map((item, index) => ({ Nº: index + 1, 'Título reconhecido': item.title, 'Data e hora': new Date(item.date).toLocaleString('pt-BR') }))
-    if (history.length) XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(history), 'Leituras')
-    XLSX.writeFile(workbook, `PROTOCOLO-FAST-${new Date().toISOString().slice(0,10)}.xlsx`)
+    const workbook = new ExcelJS.Workbook()
+    workbook.creator = 'PROTOCOLO FAST'
+    workbook.created = new Date()
+    const protocol = workbook.addWorksheet('Protocolo')
+    protocol.columns = [
+      { header: 'Nº', key: 'number', width: 8 },
+      { header: 'Título / Nome da APR', key: 'title', width: 58 },
+      { header: 'Quantidade', key: 'quantity', width: 14 },
+    ]
+    sorted.forEach((item, index) => protocol.addRow({ number: index + 1, title: item.title, quantity: item.count }))
+    protocol.getRow(1).font = { bold: true }
+    protocol.views = [{ state: 'frozen', ySplit: 1 }]
+    if (scans.length) {
+      const history = workbook.addWorksheet('Leituras')
+      history.columns = [
+        { header: 'Nº', key: 'number', width: 8 },
+        { header: 'Título reconhecido', key: 'title', width: 58 },
+        { header: 'Data e hora', key: 'date', width: 24 },
+      ]
+      scans.forEach((item, index) => history.addRow({ number: index + 1, title: item.title, date: new Date(item.date).toLocaleString('pt-BR') }))
+      history.getRow(1).font = { bold: true }
+      history.views = [{ state: 'frozen', ySplit: 1 }]
+    }
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `PROTOCOLO-FAST-${new Date().toISOString().slice(0,10)}.xlsx`
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -220,7 +244,7 @@ export default function App() {
         <div className="section-heading"><div><span className="step">02</span><div><h2>Protocolo consolidado</h2><p>Nomes repetidos são agrupados automaticamente.</p></div></div><span className="count-pill">{entries.length} ITENS</span></div>
         <div className="toolbar">
           <div className="searchbox"><Search size={17}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar atividade…" /></div>
-          <button className="export-button" onClick={exportExcel} disabled={!entries.length}><Download size={17}/> <span>EXCEL</span></button>
+          <button className="export-button" onClick={() => void exportExcel()} disabled={!entries.length}><Download size={17}/> <span>EXCEL</span></button>
         </div>
         {entries.length === 0 ? <div className="empty-state"><span><ClipboardList size={30}/></span><strong>Seu protocolo está vazio</strong><p>Fotografe a primeira APR para começar a contagem.</p></div> :
           <div className="table-wrap"><table><thead><tr><th>ATIVIDADE / TÍTULO</th><th className="quantity-heading">QTD.</th><th aria-label="Ações"/></tr></thead><tbody>

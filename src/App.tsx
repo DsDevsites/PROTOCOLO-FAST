@@ -29,6 +29,7 @@ export default function App() {
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [cameraOpen, setCameraOpen] = useState(false)
+  const [portraitFeed, setPortraitFeed] = useState(false)
   const [cameraError, setCameraError] = useState('')
   const [expanded, setExpanded] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -44,6 +45,7 @@ export default function App() {
     if (!cameraOpen || !videoRef.current || !streamRef.current) return
     const video = videoRef.current
     video.srcObject = streamRef.current
+    video.onloadedmetadata = () => setPortraitFeed(video.videoHeight > video.videoWidth && window.matchMedia('(orientation: landscape)').matches)
     video.muted = true
     video.playsInline = true
     void video.play().catch(() => {
@@ -52,6 +54,7 @@ export default function App() {
     return () => {
       video.pause()
       video.srcObject = null
+      video.onloadedmetadata = null
     }
   }, [cameraOpen])
   useEffect(() => () => {
@@ -149,6 +152,7 @@ export default function App() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 }, aspectRatio: { ideal: 16 / 9 } }, audio: false })
       streamRef.current = stream
+      setPortraitFeed(false)
       setCameraOpen(true)
     } catch {
       setCameraError('Não foi possível abrir a câmera. Verifique a permissão do navegador ou envie uma foto da galeria.')
@@ -158,19 +162,35 @@ export default function App() {
     streamRef.current?.getTracks().forEach(track => track.stop())
     streamRef.current = null
     setCameraOpen(false)
+    setPortraitFeed(false)
   }
   async function capturePhoto() {
     const video = videoRef.current
-    if (!video || !video.videoWidth) return
-    // Capture only the narrow central strip where the APR TAREFA row is aligned.
+    if (!video || !video.videoWidth || !video.videoHeight) return
+    // Normalize portrait-oriented iPhone camera feeds into a real landscape frame.
+    const rotated = video.videoHeight > video.videoWidth && window.matchMedia('(orientation: landscape)').matches
+    const fullWidth = rotated ? video.videoHeight : video.videoWidth
+    const fullHeight = rotated ? video.videoWidth : video.videoHeight
+    const full = document.createElement('canvas')
+    full.width = fullWidth
+    full.height = fullHeight
+    const fullCtx = full.getContext('2d')
+    if (!fullCtx) return
+    if (rotated) {
+      fullCtx.translate(fullWidth, 0)
+      fullCtx.rotate(Math.PI / 2)
+      fullCtx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight)
+    } else {
+      fullCtx.drawImage(video, 0, 0, fullWidth, fullHeight)
+    }
+    const bandHeight = Math.round(fullHeight * 0.24)
+    const sourceY = Math.round((fullHeight - bandHeight) / 2)
     const canvas = document.createElement('canvas')
-    const bandHeight = Math.round(video.videoHeight * 0.22)
-    const sourceY = Math.round((video.videoHeight - bandHeight) / 2)
-    canvas.width = video.videoWidth
+    canvas.width = fullWidth
     canvas.height = bandHeight
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    ctx.drawImage(video, 0, sourceY, video.videoWidth, bandHeight, 0, 0, canvas.width, canvas.height)
+    ctx.drawImage(full, 0, sourceY, fullWidth, bandHeight, 0, 0, fullWidth, bandHeight)
     closeCamera()
     canvas.toBlob(blob => { if (blob) void recognize(blob) }, 'image/jpeg', 0.96)
   }
@@ -300,7 +320,7 @@ export default function App() {
         {cameraError && <div className="notice error"><AlertCircle size={17}/>{cameraError}</div>}
         {cameraOpen && <div className="camera-panel">
           <div className="camera-head"><strong><Camera size={17}/> CÂMERA ATIVA</strong><button className="icon-button" onClick={closeCamera} aria-label="Fechar câmera"><X size={19}/></button></div>
-          <div className="camera-view"><video ref={videoRef} autoPlay playsInline muted /><div className="scan-overlay"><div className="scan-window"><span>ALINHE A LINHA TAREFA AQUI</span></div></div></div>
+          <div className={`camera-view${portraitFeed ? " rotate-feed" : ""}`}><video ref={videoRef} autoPlay playsInline muted /><div className="scan-overlay"><div className="scan-window"><span>ALINHE A LINHA TAREFA AQUI</span></div></div></div>
           <p className="camera-tip">Gire o celular na horizontal. Enquadre toda a linha que vem depois de TAREFA na faixa laranja. O restante da imagem será ignorado.</p>
           <button className="action-button full" onClick={() => void capturePhoto()}><Camera size={18}/> CAPTURAR FOTO</button>
         </div>}

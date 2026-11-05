@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createWorker } from 'tesseract.js'
-import ExcelJS from 'exceljs'
 import {
   AlertCircle, Camera, Check, CheckCircle2, ChevronDown, ChevronUp, ClipboardList,
   Download, ImagePlus, LoaderCircle, Minus, Plus, RotateCcw, Search,
@@ -47,6 +45,7 @@ export default function App() {
   const filtered = useMemo(() => entries.filter(item => item.title.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR'))), [entries, query])
 
   async function getWorker() {
+    const { createWorker } = await import('tesseract.js')
     if (!workerRef.current) {
       setStatus('Preparando reconhecimento em português…')
       workerRef.current = await createWorker('por', 1, {
@@ -155,6 +154,7 @@ export default function App() {
     if (!entries.length) { setError('Adicione pelo menos uma APR antes de exportar.'); return }
     setError('')
     const sorted = [...entries].sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'))
+    const { default: ExcelJS } = await import('exceljs')
     const workbook = new ExcelJS.Workbook()
     workbook.creator = 'PROTOCOLO FAST'
     workbook.created = new Date()

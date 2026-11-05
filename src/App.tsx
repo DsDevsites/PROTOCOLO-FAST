@@ -119,7 +119,7 @@ export default function App() {
       // Never select an arbitrary long line: only accept text anchored to the TAREFA label.
       const taskLine = lines.find(line => {
         const normalized = line.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
-        return /T\\s*[A4]\\s*R\\s*[E3]\\s*F\\s*[A4]/.test(normalized)
+        return /T\s*[A4]\s*R\s*[E3]\s*F\s*[A4]/.test(normalized)
       })
       if (!taskLine) {
         setRecognizedText('')
@@ -128,7 +128,7 @@ export default function App() {
         return
       }
       const normalizedLine = taskLine.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
-      const labelMatch = normalizedLine.match(/T[A4]REF[A4]\s*:?/)
+      const labelMatch = normalizedLine.match(/T\s*[A4]\s*R\s*[E3]\s*F\s*[A4]\s*:?/)
       const labelIndex = labelMatch?.index ?? -1
       let title = labelIndex >= 0 ? taskLine.slice(labelIndex + (labelMatch?.[0].length || 0)).replace(/^\s*[:;,.\-–—]+/, '').trim() : ''
       title = title.replace(/^TAREFA\s*/i, '').replace(/\s+/g, ' ').trim()

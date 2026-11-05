@@ -101,13 +101,12 @@ export default function App() {
       }
       ctx.putImageData(pixels, 0, 0)
 
-      await worker.setParameters({ tessedit_pageseg_mode: '6' })
       setStatus('Localizando o campo TAREFA…')
       const result = await worker.recognize(canvas)
-      const ocrLines = (result.data.lines || [])
-        .map(line => line.text.trim())
-        .filter(Boolean)
-      const lines = ocrLines.length ? ocrLines : result.data.text.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+      const lines: string[] = result.data.text
+        .split(/\r?\n/)
+        .map((line: string) => line.trim())
+        .filter((line: string) => Boolean(line))
 
       // Never select an arbitrary long line: only accept text anchored to the TAREFA label.
       const taskLine = lines.find(line => {

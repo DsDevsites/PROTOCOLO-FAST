@@ -79,17 +79,62 @@ export default function App() {
     setBusy(true); setError(''); setProgress(0); setRecognizedText(''); setTitleDraft('')
     try {
       const worker = await getWorker()
-      setStatus('Lendo o título da APR…')
-      const result = await worker.recognize(source)
-      const lines = result.data.text.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
-      const title = lines
-        .map(line => line.replace(/^\s*TAREFA\s*:?\s*/i, '').replace(/^[:;,.\-–—]+/, '').trim())
-        .filter(line => line.length >= 8)
-        .sort((a, b) => b.length - a.length)[0] || ''
+      setStatus('Preparando imagem para localizar TAREFA…')
+
+      // Enlarge and improve contrast so small printed letters are easier to read.
+      const imageBlob = source instanceof Blob ? source : await (await fetch(source)).blob()
+      const bitmap = await createImageBitmap(imageBlob)
+      const scale = Math.max(2, Math.min(3, 1800 / bitmap.width))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(bitmap.width * scale)
+      canvas.height = Math.round(bitmap.height * scale)
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })
+      if (!ctx) throw new Error('Não foi possível preparar a imagem.')
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      bitmap.close()
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      for (let i = 0; i < pixels.data.length; i += 4) {
+        const gray = Math.min(255, Math.max(0, (pixels.data[i] * 0.299 + pixels.data[i + 1] * 0.587 + pixels.data[i + 2] * 0.114 - 128) * 1.35 + 128))
+        pixels.data[i] = gray
+        pixels.data[i + 1] = gray
+        pixels.data[i + 2] = gray
+      }
+      ctx.putImageData(pixels, 0, 0)
+
+      await worker.setParameters({ tessedit_pageseg_mode: '6' })
+      setStatus('Localizando o campo TAREFA…')
+      const result = await worker.recognize(canvas)
+      const ocrLines = (result.data.lines || [])
+        .map(line => line.text.trim())
+        .filter(Boolean)
+      const lines = ocrLines.length ? ocrLines : result.data.text.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+
+      // Never select an arbitrary long line: only accept text anchored to the TAREFA label.
+      const taskLine = lines.find(line => {
+        const normalized = line.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
+        return /T[A4]REF[A4]/.test(normalized)
+      })
+      if (!taskLine) {
+        setRecognizedText('')
+        setTitleDraft('')
+        setError('Não encontrei o campo TAREFA nesta imagem. Envie uma foto que mostre a linha TAREFA: e o texto completo ao lado.')
+        return
+      }
+      const normalizedLine = taskLine.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
+      const labelMatch = normalizedLine.match(/T[A4]REF[A4]\s*:?/)
+      const labelIndex = labelMatch?.index ?? -1
+      let title = labelIndex >= 0 ? taskLine.slice(labelIndex + (labelMatch?.[0].length || 0)).replace(/^\s*[:;,.\-–—]+/, '').trim() : ''
+      title = title.replace(/^TAREFA\s*/i, '').replace(/\s+/g, ' ').trim()
+
+      if (title.length < 8) {
+        setRecognizedText('')
+        setTitleDraft('')
+        setError('Encontrei TAREFA, mas não consegui ler o nome completo ao lado. Aproxime a câmera e tente novamente.')
+        return
+      }
       setRecognizedText(title)
       setTitleDraft(title)
-      if (!title) setError('Não consegui ler a linha da TAREFA. Alinhe essa faixa no centro da câmera, aproxime o documento e tente novamente.')
-      else setStatus('Linha da TAREFA reconhecida. Confira o texto antes de adicionar.')
+      setStatus('Campo TAREFA localizado. Confira o texto antes de adicionar.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não foi possível reconhecer o texto. Tente novamente.')
     } finally { setBusy(false); setProgress(0) }

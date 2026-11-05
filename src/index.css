@@ -8,3 +8,20 @@
 .scan-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
 .scan-window{width:100%;height:22%;min-height:58px;border-top:2px solid #ff7629;border-bottom:2px solid #ff7629;box-shadow:0 0 0 999px rgba(0,0,0,.58);position:relative;display:flex;align-items:flex-start;justify-content:center}
 .scan-window span{position:absolute;top:4px;left:50%;transform:translateX(-50%);white-space:nowrap;background:#ff7629;color:#171411;border-radius:3px;padding:3px 7px;font:9px 'DM Mono',monospace;letter-spacing:.7px}
+
+/* Captura orientada para documentos: quadro horizontal 16:9 */
+.camera-view{aspect-ratio:16/9;min-height:0;max-height:none}
+.camera-view video{width:100%;height:100%;min-height:0;max-height:none;object-fit:cover}
+.camera-panel .camera-tip{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #684026;border-radius:7px;background:#241d1a;color:#f2c1a5;font-size:11px;line-height:1.55}
+.scan-window{height:24%;min-height:42px;border-top-width:2px;border-bottom-width:2px}
+.scan-window span{top:3px;font-size:8px;padding:3px 7px}
+@media (orientation:landscape) and (max-height:600px){
+  .camera-panel{padding:12px}
+  .camera-view{max-height:calc(100svh - 230px)}
+  .camera-view video{object-fit:contain}
+  .camera-panel .camera-tip{margin:8px 0;font-size:10px}
+}
+@media (max-width:650px){
+  .camera-view{aspect-ratio:16/9}
+  .camera-view video{min-height:0}
+}

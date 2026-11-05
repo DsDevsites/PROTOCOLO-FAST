@@ -62,3 +62,54 @@
   .camera-view video{object-fit:contain}
   .camera-view.rotate-feed video{object-fit:cover}
 }
+
+/* Preenchimento integral da prévia: sem letterbox/barras pretas. */
+.camera-view{
+  position:relative;
+  width:100%;
+  height:auto;
+  aspect-ratio:9 / 16;
+  min-height:0;
+  max-height: min(72svh, 680px);
+  overflow:hidden;
+  background:#111;
+  border-radius:10px;
+  container-type:size;
+}
+.camera-view video{
+  display:block;
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  min-height:0;
+  max-width:none;
+  max-height:none;
+  object-fit:cover;
+  object-position:center;
+}
+.camera-view.rotate-feed video{
+  inset:auto;
+  left:50%;
+  top:50%;
+  width:100cqh;
+  height:100cqw;
+  transform:translate(-50%,-50%) rotate(90deg);
+  object-fit:cover;
+}
+@media (orientation:landscape){
+  .camera-view{
+    aspect-ratio:16 / 9;
+    height:auto;
+    max-height: min(72svh, 560px);
+  }
+  .camera-view video{object-fit:cover}
+}
+@media (orientation:portrait){
+  .camera-view{
+    aspect-ratio:9 / 16;
+    width:min(100%, 420px);
+    margin-inline:auto;
+  }
+  .camera-view video{object-fit:cover}
+}

@@ -81,11 +81,15 @@ export default function App() {
       const worker = await getWorker()
       setStatus('Lendo o título da APR…')
       const result = await worker.recognize(source)
-      const text = result.data.text.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
-      setRecognizedText(text.join('\n'))
-      setTitleDraft(text[0] || '')
-      if (!text.length) setError('Não encontrei texto nesta imagem. Tente aproximar a câmera, melhorar a iluminação ou enviar outra foto.')
-      else setStatus('Confira o título reconhecido antes de adicionar ao protocolo.')
+      const lines = result.data.text.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+      const title = lines
+        .map(line => line.replace(/^\s*TAREFA\s*:?\s*/i, '').replace(/^[:;,.\-–—]+/, '').trim())
+        .filter(line => line.length >= 8)
+        .sort((a, b) => b.length - a.length)[0] || ''
+      setRecognizedText(title)
+      setTitleDraft(title)
+      if (!title) setError('Não consegui ler a linha da TAREFA. Alinhe essa faixa no centro da câmera, aproxime o documento e tente novamente.')
+      else setStatus('Linha da TAREFA reconhecida. Confira o texto antes de adicionar.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não foi possível reconhecer o texto. Tente novamente.')
     } finally { setBusy(false); setProgress(0) }
@@ -113,13 +117,17 @@ export default function App() {
   async function capturePhoto() {
     const video = videoRef.current
     if (!video || !video.videoWidth) return
+    // Capture only the narrow central strip where the APR TAREFA row is aligned.
     const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight
+    const bandHeight = Math.round(video.videoHeight * 0.22)
+    const sourceY = Math.round((video.videoHeight - bandHeight) / 2)
+    canvas.width = video.videoWidth
+    canvas.height = bandHeight
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    ctx.drawImage(video, 0, 0)
+    ctx.drawImage(video, 0, sourceY, video.videoWidth, bandHeight, 0, 0, canvas.width, canvas.height)
     closeCamera()
-    canvas.toBlob(blob => { if (blob) void recognize(blob) }, 'image/jpeg', 0.92)
+    canvas.toBlob(blob => { if (blob) void recognize(blob) }, 'image/jpeg', 0.96)
   }
   async function handleFile(file?: File) {
     if (!file) return
@@ -240,8 +248,8 @@ export default function App() {
         {cameraError && <div className="notice error"><AlertCircle size={17}/>{cameraError}</div>}
         {cameraOpen && <div className="camera-panel">
           <div className="camera-head"><strong><Camera size={17}/> CÂMERA ATIVA</strong><button className="icon-button" onClick={closeCamera} aria-label="Fechar câmera"><X size={19}/></button></div>
-          <video ref={videoRef} autoPlay playsInline muted />
-          <p>Enquadre o campo Título/Nome da APR e mantenha o texto bem iluminado.</p>
+          <div className="camera-view"><video ref={videoRef} autoPlay playsInline muted /><div className="scan-overlay"><div className="scan-window"><span>ALINHE A LINHA TAREFA AQUI</span></div></div></div>
+          <p>Posicione a linha inteira que vem depois de TAREFA dentro da faixa central. O restante da foto será ignorado.</p>
           <button className="action-button full" onClick={() => void capturePhoto()}><Camera size={18}/> CAPTURAR FOTO</button>
         </div>}
         {busy && <div className="processing"><LoaderCircle className="spin" size={20}/><div><strong>{status || 'Processando imagem…'}</strong><div className="progress"><span style={{ width: progress + '%' }}/></div></div><b>{progress}%</b></div>}

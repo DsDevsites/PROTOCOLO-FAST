@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createWorker, type Worker } from 'tesseract.js'
+import { createWorker } from 'tesseract.js'
 import * as XLSX from 'xlsx'
 import {
   AlertCircle, Camera, Check, CheckCircle2, ChevronDown, ChevronUp, ClipboardList,
@@ -34,7 +34,7 @@ export default function App() {
   const [expanded, setExpanded] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const workerRef = useRef<Worker | null>(null)
+  const workerRef = useRef<Awaited<ReturnType<typeof createWorker>> | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)) }, [entries])

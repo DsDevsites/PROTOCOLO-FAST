@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Home from './Home'
+import CardPrint from './CardPrint'
 import {
   AlertCircle, Camera, Check, CheckCircle2, ChevronDown, ChevronUp, ClipboardList,
   Download, ImagePlus, LoaderCircle, Minus, Plus, RotateCcw, Search,
@@ -17,6 +19,7 @@ function normalizeTitle(value: string) {
 function makeId() { return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}` }
 
 export default function App() {
+  const [activeModule, setActiveModule] = useState<'home' | 'protocol' | 'cards'>('home')
   const [entries, setEntries] = useState<Entry[]>(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') as Entry[] } catch { return [] }
   })
@@ -288,9 +291,13 @@ export default function App() {
     }
   }
 
+  if (activeModule === 'home') return <Home onSelect={module => setActiveModule(module)} />
+  if (activeModule === 'cards') return <CardPrint onBack={() => setActiveModule('home')} />
+
   return (
     <main className="app-shell">
       <header className="topbar">
+        <button className="back-button" onClick={() => setActiveModule("home")}>← VOLTAR AOS SISTEMAS</button>
         <a className="brand" href="#" aria-label="PROTOCOLO FAST início">
           <span className="brand-mark"><Zap size={22} fill="currentColor" /></span>
           <span><strong>PROTOCOLO<span> FAST</span></strong><small>LEITURA INTELIGENTE DE APR</small></span>

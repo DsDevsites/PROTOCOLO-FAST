@@ -1,4 +1,4 @@
-import { ArrowRight, ClipboardList, FileImage, ShieldCheck, Zap } from 'lucide-react'
+import { ArrowRight, FileImage, ShieldCheck, Zap } from 'lucide-react'
 
 export default function Home({ onSelect }: { onSelect: (module: 'protocol' | 'cards') => void }) {
   return <main className="app-shell home-shell">

@@ -21,13 +21,10 @@ export default function CardPrint({ onBack }: { onBack: () => void }) {
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const images = Array.from(files).filter(file => file.type.startsWith('image/'))
     if (!images.length) { setError('Selecione ou cole uma imagem PNG, JPG ou WEBP.'); return }
-    const remaining = 120 - cards.length
-    if (remaining <= 0) { setError('Limite de 120 carteirinhas por montagem atingido. Gere o PDF e inicie outra montagem.'); return }
     try {
-      const accepted = images.slice(0, remaining)
-      const loaded = await Promise.all(accepted.map(async file => ({ id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`, src: await readImage(file), name: file.name || 'Carteirinha colada' })))
+      const loaded = await Promise.all(images.map(async file => ({ id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`, src: await readImage(file), name: file.name || 'Carteirinha colada' })))
       setCards(current => [...current, ...loaded])
-      setError(images.length > remaining ? 'Foram adicionadas somente as primeiras imagens que cabiam no limite desta montagem.' : '')
+      setError('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não foi possível adicionar as imagens.')
     }

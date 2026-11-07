@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowLeft, ArrowUp, Camera, Check, Download, FileImage, FilePlus2, FileText, FolderOpen, ImagePlus, LoaderCircle, Merge, RotateCw, ScanLine, Split, Trash2, Upload, X } from 'lucide-react'
 import { PDFDocument } from 'pdf-lib'
 import Cropper, { type Area } from 'react-easy-crop'
+import 'react-easy-crop/react-easy-crop.css'
 
 type PageRecord = { id: string; name: string; blob: Blob; date: string; suggestedDate: string; dateStatus: 'pending' | 'confirmed' | 'unread'; createdAt: number; rotation: number; filter: 'color' | 'gray' | 'bw' }
 type PdfRecord = { id: string; name: string; bytes: Uint8Array; pages: number }
@@ -106,7 +107,7 @@ export default function Scanner({ onBack }: { onBack: () => void }) {
   async function startCamera(){
     setError('')
     if(!navigator.mediaDevices?.getUserMedia){setError('Câmera indisponível neste navegador. Importe uma imagem.');return}
-    try{streamRef.current=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});setCamera(true)}
+    try{streamRef.current=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:2560},height:{ideal:1920}},audio:false});setCamera(true)}
     catch{setError('Não foi possível abrir a câmera. Verifique a permissão do navegador.')}
   }
   function stopCamera(){streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;setCamera(false)}

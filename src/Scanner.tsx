@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowLeft, ArrowUp, Camera, Check, Download, FileImage, FilePlus2, FileText, FolderOpen, ImagePlus, LoaderCircle, Merge, RotateCw, ScanLine, Split, Trash2, Upload, X } from 'lucide-react'
 import { PDFDocument } from 'pdf-lib'
+import Cropper, { type Area } from 'react-easy-crop'
 
 type PageRecord = { id: string; name: string; blob: Blob; date: string; suggestedDate: string; dateStatus: 'pending' | 'confirmed' | 'unread'; createdAt: number; rotation: number; filter: 'color' | 'gray' | 'bw' }
 type PdfRecord = { id: string; name: string; bytes: Uint8Array; pages: number }
+type ReviewImage = { file: File; url: string }
 const DB_NAME = 'nexo-operacional-scanner'
 const STORE = 'pages'
 const makeId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
@@ -73,6 +75,12 @@ export default function Scanner({ onBack }: { onBack: () => void }) {
   const [message,setMessage]=useState('')
   const [error,setError]=useState('')
   const [camera,setCamera]=useState(false)
+  const [reviewQueue,setReviewQueue]=useState<ReviewImage[]>([])
+  const [reviewIndex,setReviewIndex]=useState(0)
+  const [crop,setCrop]=useState({x:0,y:0})
+  const [zoom,setZoom]=useState(1)
+  const [cropArea,setCropArea]=useState<Area|null>(null)
+  const [cropAspect,setCropAspect]=useState(0.707)
   const [pdfFiles,setPdfFiles]=useState<PdfRecord[]>([])
   const [splitFile,setSplitFile]=useState<PdfRecord|null>(null)
   const [range,setRange]=useState('1')
@@ -102,26 +110,46 @@ export default function Scanner({ onBack }: { onBack: () => void }) {
     catch{setError('Não foi possível abrir a câmera. Verifique a permissão do navegador.')}
   }
   function stopCamera(){streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;setCamera(false)}
-  async function addImageFiles(files: FileList|File[]){
-    const list=Array.from(files).filter(f=>f.type.startsWith('image/'))
-    if(!list.length){setError('Selecione arquivos de imagem válidos.');return}
+  function stageImageFiles(files: FileList|File[]){
+    const list=Array.from(files).filter(f=>f.type.startsWith('image/')&&f.size<=25*1024*1024)
+    if(!list.length){setError('Selecione imagens válidas de até 25 MB cada.');return}
+    const staged=list.map(file=>({file,url:URL.createObjectURL(file)}))
+    setReviewQueue(current=>[...current,...staged])
+    setReviewIndex(current=>current===0&&reviewQueue.length===0?0:current)
+    setCrop({x:0,y:0});setZoom(1);setCropArea(null);setError('')
+    setMessage(`${staged.length} imagem(ns) aguardando revisão e recorte.`)
+  }
+  async function confirmCrop(){
+    const item=reviewQueue[reviewIndex]
+    if(!item||!cropArea){setError('Ajuste o enquadramento antes de confirmar.');return}
     setBusy(true);setError('')
     try{
-      for(const file of list){
-        if(file.size>25*1024*1024){setError(`${file.name}: limite de 25 MB por imagem.`);continue}
-        const page:PageRecord={id:makeId(),name:file.name||`Página ${pages.length+1}`,blob:file,date:'',suggestedDate:'',dateStatus:'pending',createdAt:Date.now()+pages.length,rotation:0,filter:'color'}
-        await savePage(page);setPages(current=>[...current,page])
-      }
-      setMessage(`${list.length} imagem(ns) adicionada(s). Confirme as datas para organizar.`)
-    }catch(e){setError(e instanceof Error?e.message:'Erro ao salvar as imagens.')}
+      const image=new Image();image.src=item.url
+      await new Promise<void>((resolve,reject)=>{image.onload=()=>resolve();image.onerror=()=>reject(new Error('Não foi possível abrir a imagem para recorte.'))})
+      const canvas=document.createElement('canvas')
+      canvas.width=Math.max(1,Math.round(cropArea.width));canvas.height=Math.max(1,Math.round(cropArea.height))
+      const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Falha ao preparar o recorte.')
+      ctx.drawImage(image,cropArea.x,cropArea.y,cropArea.width,cropArea.height,0,0,canvas.width,canvas.height)
+      const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Falha ao salvar o recorte.')),'image/jpeg',0.94))
+      const page:PageRecord={id:makeId(),name:item.file.name||`Página ${pages.length+1}`,blob,date:'',suggestedDate:'',dateStatus:'pending',createdAt:Date.now()+pages.length,rotation:0,filter:'color'}
+      await savePage(page);setPages(current=>[...current,page])
+      URL.revokeObjectURL(item.url)
+      const next=reviewQueue.filter((_,index)=>index!==reviewIndex)
+      setReviewQueue(next);setReviewIndex(0);setCrop({x:0,y:0});setZoom(1);setCropArea(null)
+      setMessage(next.length?`Página salva. Restam ${next.length} imagem(ns) para revisar.`:'Página recortada e salva com sucesso.')
+    }catch(e){setError(e instanceof Error?e.message:'Não foi possível confirmar a página.')}
     finally{setBusy(false)}
+  }
+  function discardReview(){
+    const item=reviewQueue[reviewIndex];if(item)URL.revokeObjectURL(item.url)
+    setReviewQueue(current=>current.filter((_,index)=>index!==reviewIndex));setReviewIndex(0);setCropArea(null)
   }
   async function capture(){
     const video=videoRef.current;if(!video||!video.videoWidth)return
     const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight
     const ctx=canvas.getContext('2d');if(!ctx)return
     ctx.drawImage(video,0,0);const blob=await new Promise<Blob|null>(r=>canvas.toBlob(r,'image/jpeg',0.94))
-    if(blob){stopCamera();await addImageFiles([new File([blob],`scanner-${Date.now()}.jpg`,{type:'image/jpeg'})])}
+    if(blob){stopCamera();stageImageFiles([new File([blob],`scanner-${Date.now()}.jpg`,{type:'image/jpeg'})])}
   }
   async function suggestDate(page:PageRecord){
     setBusy(true);setMessage('Analisando a página para sugerir uma data…');setError('')
@@ -201,8 +229,9 @@ export default function Scanner({ onBack }: { onBack: () => void }) {
     {message&&<div className="notice success">{message}<button onClick={()=>setMessage('')}><X size={15}/></button></div>}
     {busy&&<div className="processing"><LoaderCircle className="spin"/><strong>Processando documento…</strong></div>}
     {tab==='scan'&&<section className="workspace"><div className="section-heading"><div><span className="step">01</span><div><h2>Adicionar páginas</h2><p>Use a câmera ou importe várias imagens.</p></div></div><span className="tag">ATÉ 25 MB / IMAGEM</span></div>
-      <div className="scanner-actions"><button className="capture-card primary" onClick={()=>void startCamera()}><Camera/><strong>ABRIR CÂMERA</strong><small>Fotografar uma página</small></button><button className="capture-card" onClick={()=>imageInput.current?.click()}><ImagePlus/><strong>IMPORTAR IMAGENS</strong><small>Galeria ou arquivos • múltiplas páginas</small></button><input ref={imageInput} hidden type="file" accept="image/*" multiple onChange={e=>{if(e.target.files)void addImageFiles(e.target.files);e.currentTarget.value=''}}/></div>
-      {camera&&<div className="camera-panel"><div className="camera-head"><strong><Camera size={16}/> CÂMERA ATIVA</strong><button className="icon-button" onClick={stopCamera}><X/></button></div><video ref={videoRef} className="scanner-video" autoPlay playsInline muted/><p className="camera-tip">Mantenha a página inteira enquadrada, com boa iluminação e sem sombras.</p><button className="action-button full" onClick={()=>void capture()}><Camera size={17}/> CAPTURAR PÁGINA</button></div>}
+      <div className="scanner-actions"><button className="capture-card primary" onClick={()=>void startCamera()}><Camera/><strong>ABRIR CÂMERA</strong><small>Fotografar uma página</small></button><button className="capture-card" onClick={()=>imageInput.current?.click()}><ImagePlus/><strong>IMPORTAR IMAGENS</strong><small>Galeria ou arquivos • múltiplas páginas</small></button><input ref={imageInput} hidden type="file" accept="image/*" multiple onChange={e=>{if(e.target.files)stageImageFiles(e.target.files);e.currentTarget.value=''}}/></div>
+      {camera&&<div className="camera-panel camera-panel-large"><div className="camera-head"><strong><Camera size={16}/> CÂMERA ATIVA • ENQUADRE A FOLHA</strong><button className="icon-button" onClick={stopCamera}><X/></button></div><div className="live-camera-stage"><video ref={videoRef} className="scanner-video" autoPlay playsInline muted/><div className="document-guide"><span>ENQUADRE A PÁGINA INTEIRA</span></div></div><p className="camera-tip">Aproxime a câmera até a folha ocupar a maior parte da tela. Depois da foto, você poderá ajustar o corte manualmente.</p><button className="action-button full capture-large" onClick={()=>void capture()}><Camera size={19}/> CAPTURAR PÁGINA</button></div>}
+      {!!reviewQueue.length&&<div className="crop-review-panel"><div className="camera-head"><strong><ScanLine size={16}/> REVISAR E RECORTAR • {reviewIndex+1} DE {reviewQueue.length}</strong><button className="icon-button" onClick={discardReview}><X/></button></div><p className="crop-help">Arraste a imagem para centralizar a folha dentro do quadro. Amplie ou reduza e escolha o formato do recorte.</p><div className="crop-stage"><Cropper image={reviewQueue[reviewIndex].url} crop={crop} zoom={zoom} aspect={cropAspect} onCropChange={setCrop} onZoomChange={setZoom} onCropComplete={(_,area)=>setCropArea(area)} restrictPosition={false} showGrid/></div><div className="crop-controls"><label>FORMATO DO RECORTE<select value={cropAspect} onChange={e=>setCropAspect(Number(e.target.value))}><option value={0.707}>A4 vertical</option><option value={1}>Quadrado</option><option value={1.414}>A4 horizontal</option></select></label><label>ZOOM <input type="range" min="1" max="3" step="0.05" value={zoom} onChange={e=>setZoom(Number(e.target.value))}/></label></div><div className="crop-actions"><button className="secondary-button" onClick={discardReview}>DESCARTAR ESTA IMAGEM</button><button className="action-button" disabled={busy||!cropArea} onClick={()=>void confirmCrop()}><Check size={16}/> CONFIRMAR RECORTE</button></div></div>}
       <div className="scanner-note"><FileText size={18}/><div><strong>Preservação do original</strong><p>As imagens ficam armazenadas localmente neste navegador. A data sugerida nunca é confirmada automaticamente.</p></div></div>
     </section>}
     {tab==='library'&&<section className="protocol"><div className="section-heading"><div><span className="step">02</span><div><h2>Documentos digitalizados</h2><p>Confirme as datas e organize em ordem cronológica.</p></div></div><span className="count-pill">{pages.length} PÁGINAS</span></div>

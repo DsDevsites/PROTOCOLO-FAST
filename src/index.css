@@ -241,3 +241,30 @@
 
 .scan-filter{width:100%;max-width:230px;border:1px solid #414249;background:#0e0f12;color:#ddd;border-radius:6px;padding:8px;font-size:11px;color-scheme:dark}
 .scan-thumb img{max-width:100%;max-height:100%;object-fit:contain}
+
+
+/* Captura ampliada e recorte manual do scanner */
+.camera-panel-large{width:100%;padding:18px}
+.live-camera-stage{position:relative;width:100%;height:min(72svh,780px);min-height:390px;display:grid;place-items:center;overflow:hidden;border-radius:10px;background:#050505}
+.camera-panel-large .scanner-video{width:100%;height:100%;max-height:none;object-fit:contain;border-radius:0}
+.document-guide{position:absolute;inset:8% 12%;border:2px dashed rgba(255,145,83,.9);border-radius:8px;pointer-events:none;box-shadow:0 0 0 999px rgba(0,0,0,.13)}
+.document-guide span{position:absolute;left:50%;top:10px;transform:translateX(-50%);white-space:nowrap;background:rgba(10,10,12,.78);color:#ffad7d;border-radius:4px;padding:6px 9px;font:9px 'DM Mono',monospace;letter-spacing:.7px}
+.capture-large{min-height:54px;margin-top:12px;font-size:12px}
+.crop-review-panel{margin-top:18px;padding:16px;border:1px solid #5a402f;border-radius:10px;background:#151519}
+.crop-help{font-size:11px;line-height:1.6;color:#b7b7bd;margin:0 0 12px}
+.crop-stage{position:relative;width:100%;height:min(65svh,650px);min-height:340px;background:#050505;border-radius:8px;overflow:hidden}
+.crop-controls{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}
+.crop-controls label{display:grid;gap:8px;color:#b5b5bc;font:9px 'DM Mono',monospace;letter-spacing:.7px}
+.crop-controls select{width:100%;padding:10px;border:1px solid #44454c;border-radius:6px;background:#0d0e11;color:#eee;color-scheme:dark}
+.crop-controls input[type=range]{width:100%;accent-color:var(--orange)}
+.crop-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.crop-actions button{min-height:42px}
+@media(max-width:700px){
+ .camera-panel-large{position:relative;margin:12px 0;padding:10px}
+ .live-camera-stage{height:68svh;min-height:390px}
+ .document-guide{inset:7% 5%}
+ .crop-stage{height:58svh;min-height:330px}
+ .crop-controls{grid-template-columns:1fr}
+ .crop-actions{display:grid;grid-template-columns:1fr}
+ .crop-actions button{width:100%}
+}

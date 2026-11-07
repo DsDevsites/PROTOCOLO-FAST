@@ -275,7 +275,7 @@ export default function App() {
     if (!entries.length) { setError('Adicione pelo menos uma APR antes de exportar.'); return }
     setError('')
     try {
-      const sorted = [...entries].sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'))
+      const sorted = [...entries] // Preserve the order in which APR titles were first read
       const { default: ExcelJS } = await import('exceljs')
       const workbook = new ExcelJS.Workbook()
       workbook.creator = 'NEXO OPERACIONAL'

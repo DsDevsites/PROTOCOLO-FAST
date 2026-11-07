@@ -182,3 +182,58 @@
   .print-card img{display:block;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:fill;image-rendering:auto}
   .app-shell{display:block!important}
 }
+
+
+/* NEXO Operacional — identidade e scanner */
+.home-shell .module-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.module-scanner{background:linear-gradient(145deg,rgba(255,118,41,.11),transparent 60%),#191a1f}
+.module-scanner .module-icon{background:#30241e;color:var(--orange)}
+.scanner-app{max-width:1040px}
+.scanner-hero{padding-top:42px}
+.scanner-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0 18px}
+.scanner-tabs button{min-height:46px;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid #393a40;border-radius:8px;background:#1b1c21;color:#a8a8af;font-size:10px;font-weight:700;letter-spacing:.35px;padding:8px}
+.scanner-tabs button.active{border-color:#8b4a25;background:#30231d;color:#ff9a61}
+.scanner-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.scanner-actions .capture-card{min-height:120px}
+.scanner-video{display:block;width:100%;max-height:65svh;aspect-ratio:4/3;object-fit:contain;background:#050505;border-radius:8px}
+.scanner-note{display:flex;gap:12px;align-items:flex-start;margin-top:16px;padding:14px;border:1px solid #3a3b40;border-radius:9px;background:#1d1e23;color:var(--orange)}
+.scanner-note strong{font-size:11px;color:#e8e8eb}
+.scanner-note p{font-size:10px;line-height:1.6;color:#a1a1a8;margin:4px 0 0}
+.scan-page-list{display:grid;gap:12px}
+.scan-page-card{display:grid;grid-template-columns:112px minmax(0,1fr) auto;gap:14px;align-items:start;padding:12px;border:1px solid #35363d;border-radius:9px;background:#131419}
+.scan-thumb{height:140px;background:#08090b;border-radius:6px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.scan-thumb img{width:100%;height:100%;object-fit:contain}
+.scan-page-info{min-width:0;display:flex;flex-direction:column;gap:6px}
+.scan-page-info>strong{font-size:11px;overflow-wrap:anywhere}
+.scan-page-info label,.split-panel label{font:9px 'DM Mono',monospace;color:#a2a2a9;letter-spacing:.8px;margin-top:4px}
+.scan-page-info input[type=date]{width:100%;max-width:230px;border:1px solid #414249;background:#0e0f12;color:white;border-radius:6px;padding:9px;font:12px Manrope,sans-serif;color-scheme:dark}
+.scan-status{font:9px 'DM Mono',monospace;color:#e6a16f}
+.scan-row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.scan-row-actions .action-button,.scan-row-actions .secondary-button{font-size:9px;padding:9px 10px}
+.scan-tools{display:flex;flex-direction:column;gap:5px}
+.scan-tools button,.pdf-list button{width:29px;height:29px;display:grid;place-items:center;border:1px solid #3a3b42;border-radius:5px;background:#202126;color:#a8a8ae}
+.scan-tools button:hover,.pdf-list button:hover{border-color:var(--orange);color:var(--orange)}
+.pdf-list{display:grid;gap:8px;margin:15px 0}
+.pdf-list>div{display:flex;align-items:center;gap:9px;padding:10px;border:1px solid #35363d;border-radius:7px;background:#14151a;color:#ff9a61}
+.pdf-list span{flex:1;min-width:0;font-size:11px;color:#e6e6e9;overflow-wrap:anywhere}
+.pdf-list small{display:block;color:#96969e;font-size:9px;margin-top:3px}
+.split-panel{margin-top:16px;padding:15px;border:1px solid #3b3c42;border-radius:8px;background:#131419}
+.split-panel>strong{font-size:12px;overflow-wrap:anywhere}
+.split-panel p{font-size:10px;color:#aaa}
+.split-panel .title-input{margin:8px 0 12px}
+.scanner-app .card-actions{flex-wrap:wrap}
+@media(max-width:760px){
+  .home-shell .module-grid{grid-template-columns:1fr}
+  .scanner-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .scan-page-card{grid-template-columns:84px minmax(0,1fr)}
+  .scan-thumb{height:116px}
+  .scan-tools{grid-column:1/-1;flex-direction:row;justify-content:flex-end}
+  .scanner-hero{display:block}
+  .scanner-hero .hero-stats{margin-top:22px}
+}
+@media(max-width:520px){
+  .scanner-actions{grid-template-columns:1fr}
+  .scanner-tabs button{font-size:9px}
+  .scan-row-actions{display:grid;grid-template-columns:1fr}
+  .scan-row-actions button{width:100%}
+}

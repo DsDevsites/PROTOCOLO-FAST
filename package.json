@@ -14,7 +14,8 @@
     "react-dom": "^18.3.1",
     "tesseract.js": "^7.0.0",
     "exceljs": "^4.4.0",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "react-easy-crop": "^5.4.2"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",

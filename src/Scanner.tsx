@@ -36,19 +36,22 @@ async function deletePage(id: string) {
   db.close()
 }
 function dateISO(value: string): string | null {
-  const iso=value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
-  if(iso){const year=Number(iso[1]),month=Number(iso[2]),day=Number(iso[3]);const date=new Date(year,month-1,day);if(month&&date.getFullYear()===year&&date.getMonth()===month-1&&date.getDate()===day)return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`}
-  const numeric = value.match(/(^|\\D)(\\d{1,2})[\\/.\\-](\\d{1,2})[\\/.\\-](\\d{2,4})(\\D|$)/)
-  let day=0, month=0, year=0
-  if(numeric){day=Number(numeric[2]);month=Number(numeric[3]);const rawYear=Number(numeric[4]);year=rawYear<100?2000+rawYear:rawYear}
+  const cleaned=value.trim().replace(/\\s+/g,' ')
+  const iso=cleaned.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})$/)
+  let day=0,month=0,year=0
+  if(iso){year=Number(iso[1]);month=Number(iso[2]);day=Number(iso[3])}
   else {
-    const named=value.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().match(/(\\d{1,2})\\s+de\\s+([a-z]+)\\s+de\\s+(\\d{4})/)
-    if(!named)return null
-    const months=['janeiro','fevereiro','marco','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
-    day=Number(named[1]);month=months.indexOf(named[2])+1;year=Number(named[3])
+    const numeric=cleaned.match(/(?:^|\\D)(\\d{1,2})\\s*[\\/.\\-]\\s*(\\d{1,2})\\s*[\\/.\\-]\\s*(\\d{2,4})(?:\\D|$)/)
+    if(numeric){day=Number(numeric[1]);month=Number(numeric[2]);const rawYear=Number(numeric[3]);year=rawYear<100?2000+rawYear:rawYear}
+    else {
+      const named=cleaned.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().match(/(\\d{1,2})\\s+de\\s+([a-z]+)\\s+de\\s+(\\d{4})/)
+      if(!named)return null
+      const months=['janeiro','fevereiro','marco','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
+      day=Number(named[1]);month=months.indexOf(named[2])+1;year=Number(named[3])
+    }
   }
   const date=new Date(year,month-1,day)
-  if(!month||date.getFullYear()!==year||date.getMonth()!==month-1||date.getDate()!==day)return null
+  if(!month||year<2000||year>2099||date.getFullYear()!==year||date.getMonth()!==month-1||date.getDate()!==day)return null
   return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
 }
 function formatDate(value: string) { if (!value) return 'Data não confirmada'; const [y,m,d]=value.split('-'); return `${d}/${m}/${y}` }
@@ -162,8 +165,10 @@ export default function Scanner({ onBack }: { onBack: () => void }) {
       const result=await worker.recognize(page.blob)
       await worker.terminate()
       const text=result.data.text
-      const candidates=[...text.matchAll(/\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}/g)].map(m=>m[0])
-      const candidate=candidates.map(v=>({raw:v,iso:dateISO(v)})).find(v=>v.iso)
+      const header=text.split(/\\r?\\n/).slice(0,14).join(' ')
+      const candidates=[...header.matchAll(/\\d{1,2}\\s*[\\/.\\-]\\s*\\d{1,2}\\s*[\\/.\\-]\\s*\\d{2,4}/g)].map(m=>m[0])
+      const allCandidates=[...candidates,...[...text.matchAll(/\\d{1,2}\\s*[\\/.\\-]\\s*\\d{1,2}\\s*[\\/.\\-]\\s*\\d{2,4}/g)].map(m=>m[0])]
+      const candidate=allCandidates.map(v=>({raw:v,iso:dateISO(v)})).find(v=>v.iso)
       const next={...page,date:candidate?.iso??'',suggestedDate:candidate?.iso??'',dateStatus:'pending' as const}
       await savePage(next);setPages(current=>current.map(p=>p.id===page.id?next:p))
       setMessage(candidate? `Sugestão encontrada: ${formatDate(candidate.iso!)}. Confira e confirme manualmente.` : 'DATA NÃO IDENTIFICADA — CONFIRMAÇÃO NECESSÁRIA. Digite a data manualmente.')
@@ -177,10 +182,12 @@ export default function Scanner({ onBack }: { onBack: () => void }) {
       worker=await createWorker('por')
       const result=await worker.recognize(page.blob)
       const text=result.data.text.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-      const numeric=[...text.matchAll(/\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}/g)].map(m=>m[0])
-      const iso=[...text.matchAll(/\b\d{4}-\d{1,2}-\d{1,2}\b/g)].map(m=>m[0])
-      const named=[...text.matchAll(/\d{1,2}\s+de\s+[a-z]+\s+de\s+\d{4}/gi)].map(m=>m[0])
-      const candidate=[...numeric,...iso,...named].map(raw=>dateISO(raw)).find((value):value is string=>Boolean(value))
+      const header=text.split(/\\r?\\n/).slice(0,14).join(' ')
+      const numeric=[...header.matchAll(/\\d{1,2}\\s*[\\/.\\-]\\s*\\d{1,2}\\s*[\\/.\\-]\\s*\\d{2,4}/g)].map(m=>m[0])
+      const allNumeric=[...numeric,...[...text.matchAll(/\\d{1,2}\\s*[\\/.\\-]\\s*\\d{1,2}\\s*[\\/.\\-]\\s*\\d{2,4}/g)].map(m=>m[0])]
+      const iso=[...header.matchAll(/\\b\\d{4}-\\d{1,2}-\\d{1,2}\\b/g)].map(m=>m[0])
+      const named=[...header.matchAll(/\\d{1,2}\\s+de\\s+[a-z]+\\s+de\\s+\\d{4}/gi)].map(m=>m[0])
+      const candidate=[...allNumeric,...iso,...named].map(raw=>dateISO(raw)).find((value):value is string=>Boolean(value))
       if(candidate){
         const latest=(await loadPages()).find(p=>p.id===page.id)
         if(latest&&!latest.date&&!latest.suggestedDate){

@@ -268,3 +268,22 @@
  .crop-actions{display:grid;grid-template-columns:1fr}
  .crop-actions button{width:100%}
 }
+
+
+/* Ajustes de organização, datas e limpeza em lote do NEXO Scanner */
+.scan-page-info .date-field-label{display:block;margin-top:9px;margin-bottom:1px;color:#ffb184;font-size:10px;letter-spacing:1px;font-weight:700}
+.scan-page-info .scan-date-input{display:block;width:100%;max-width:310px;min-height:48px;padding:11px 13px;border:1px solid #765039;border-radius:9px;background:linear-gradient(145deg,#202025,#111216);color:#fff;color-scheme:dark;font:600 15px Manrope,sans-serif;letter-spacing:.4px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);accent-color:var(--orange)}
+.scan-page-info .scan-date-input:focus{outline:2px solid rgba(255,118,41,.35);border-color:var(--orange)}
+.scan-page-info .scan-status{font-size:9px;line-height:1.5;color:#f0ad7e}
+.scanner-library-actions{align-items:flex-start}
+.scanner-library-actions>div{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+.scanner-library-actions .secondary-button,.scanner-library-actions .action-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:42px}
+.danger-outline{border-color:#75413b!important;color:#ff9b88!important}
+.danger-outline:hover{border-color:#ff765d!important;background:rgba(255,91,75,.09)!important;color:#ffb3a5!important}
+.clear-pdf-list{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:12px 0}
+@media(max-width:650px){
+ .scan-page-info .scan-date-input{max-width:none;min-height:50px;font-size:16px}
+ .scanner-library-actions{display:flex;flex-direction:column;align-items:stretch;gap:12px}
+ .scanner-library-actions>div{display:grid;grid-template-columns:1fr}
+ .scanner-library-actions>div button{width:100%;min-height:46px}
+}

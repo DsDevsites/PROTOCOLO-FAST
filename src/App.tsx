@@ -87,65 +87,89 @@ export default function App() {
     setBusy(true); setError(''); setProgress(0); setRecognizedText(''); setTitleDraft('')
     try {
       const worker = await getWorker()
-      setStatus('Preparando imagem para localizar TAREFA…')
-
-      // Enlarge and improve contrast so small printed letters are easier to read.
+      setStatus('Preparando imagem e procurando o nome digitado da APR…')
       const imageBlob = source instanceof Blob ? source : await (await fetch(source)).blob()
       const bitmap = await createImageBitmap(imageBlob)
-      const scale = Math.min(2, 1800 / bitmap.width)
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.round(bitmap.width * scale)
-      canvas.height = Math.round(bitmap.height * scale)
-      const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('Não foi possível preparar a imagem.')
-      // Browser-native image enhancement avoids a slow per-pixel JavaScript loop.
-      ctx.filter = 'grayscale(1) contrast(1.45) brightness(1.08)'
-      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-      ctx.filter = 'none'
+      const scale = Math.min(3, 2600 / bitmap.width)
+      const base = document.createElement('canvas')
+      base.width = Math.max(1, Math.round(bitmap.width * scale))
+      base.height = Math.max(1, Math.round(bitmap.height * scale))
+      const baseCtx = base.getContext('2d')
+      if (!baseCtx) throw new Error('Não foi possível preparar a imagem.')
+      baseCtx.drawImage(bitmap, 0, 0, base.width, base.height)
       bitmap.close()
 
-      setStatus(mode === 'task-row' ? 'Lendo a linha da TAREFA…' : 'Localizando a linha TAREFA na APR…')
-      // Use single-line segmentation for the camera strip and sparse text for full-page photos.
-      // Disable dictionary correction so technical APR terms are not replaced by common words.
-      const parameters = {
-        tessedit_pageseg_mode: mode === 'task-row' ? '7' : '11',
-        load_system_dawg: '0',
-        load_freq_dawg: '0',
-        preserve_interword_spaces: '1',
+      // APR title fields are normally typed. Read the full page and the upper/header area
+      // with different segmentation modes to avoid losing a title because of page layout.
+      const sources: HTMLCanvasElement[] = [base]
+      if (mode === 'full-page') {
+        const header = document.createElement('canvas')
+        header.width = base.width
+        header.height = Math.max(1, Math.round(base.height * 0.68))
+        const headerCtx = header.getContext('2d')
+        if (headerCtx) { headerCtx.drawImage(base, 0, 0, base.width, header.height, 0, 0, header.width, header.height); sources.push(header) }
       }
-      await (worker as unknown as { setParameters: (value: Record<string, string>) => Promise<void> }).setParameters(parameters)
-      const result = await worker.recognize(canvas)
-      const lines: string[] = result.data.text
-        .split(/\r?\n/)
-        .map((line: string) => line.trim())
-        .filter((line: string) => Boolean(line))
-
-      // Never select an arbitrary long line: only accept text anchored to the TAREFA label.
-      const taskLine = lines.find(line => {
-        const normalized = line.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
-        return /T\s*[A4]\s*R\s*[E3]\s*F\s*[A4]/.test(normalized)
-      })
-      if (!taskLine) {
-        setRecognizedText('')
-        setTitleDraft('')
-        setError('Não encontrei o campo TAREFA nesta imagem. Envie uma foto que mostre a linha TAREFA: e o texto completo ao lado.')
-        return
+      const modes = mode === 'task-row' ? ['7', '6'] : ['6', '11', '4']
+      const allLines: string[] = []
+      const recognizer = worker as unknown as {
+        setParameters: (value: Record<string, string>) => Promise<void>
+        recognize: (image: HTMLCanvasElement) => Promise<{ data: { text: string } }>
       }
-      const normalizedLine = taskLine.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
-      const labelMatch = normalizedLine.match(/T\s*[A4]\s*R\s*[E3]\s*F\s*[A4]\s*:?/)
-      const labelIndex = labelMatch?.index ?? -1
-      let title = labelIndex >= 0 ? taskLine.slice(labelIndex + (labelMatch?.[0].length || 0)).replace(/^\s*[:;,.\-–—]+/, '').trim() : ''
-      title = title.replace(/^TAREFA\s*/i, '').replace(/\s+/g, ' ').trim()
+      for (const canvas of sources) {
+        for (const pageSegMode of modes) {
+          setStatus(mode === 'task-row' ? 'Lendo a faixa da APR em mais de uma passagem…' : 'Analisando o cabeçalho e o conteúdo da APR…')
+          await recognizer.setParameters({
+            tessedit_pageseg_mode: pageSegMode,
+            load_system_dawg: '0',
+            load_freq_dawg: '0',
+            preserve_interword_spaces: '1',
+            user_defined_dpi: '300',
+          })
+          const result = await recognizer.recognize(canvas)
+          allLines.push(...result.data.text.split(/\r?\n/).map(line => line.trim()).filter(Boolean))
+        }
+      }
 
+      const clean = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+      const labelPatterns = [
+        /T\s*[A4]\s*R\s*[E3]\s*F\s*[A4]\s*:?/,
+        /NOME\s+DA\s+A\s*P\s*R\s*:?/,
+        /TITULO\s+DA\s+A\s*P\s*R\s*:?/,
+        /DESCRICAO\s+DA\s+ATIVIDADE\s*:?/,
+      ]
+      let title = ''
+      for (const line of allLines) {
+        const normalized = clean(line)
+        const label = labelPatterns.map(pattern => normalized.match(pattern)).find(Boolean)
+        if (!label) continue
+        const index = label.index ?? -1
+        const after = index >= 0 ? normalized.slice(index + label[0].length).replace(/^\s*[:;,\.\-–—]+/, '').trim() : ''
+        const before = index > 0 ? normalized.slice(0, index).trim() : ''
+        const candidate = after.length >= 8 ? after : before.length >= 8 ? before : ''
+        if (candidate.length > title.length) title = candidate
+      }
+
+      // If the printed label was not detected, only use a strong, long text line from
+      // the header area; never add a short fragment or a line made only of form labels.
+      if (title.length < 8) {
+        const excluded = /^(APR|ANALISE PRELIMINAR DE RISCO|DATA|EMPRESA|CONTRATADA|RESPONSAVEL|LOCAL|SETOR|CLIENTE|PAGINA|NUMERO|NOME|ASSINATURA|VALIDADE)$/
+        const candidates = allLines.map(line => clean(line))
+          .filter(line => line.length >= 16 && /[A-Z]/.test(line) && !excluded.test(line))
+          .filter(line => !/^(\d+\s*)+$/.test(line))
+        const likely = candidates.sort((a, b) => b.length - a.length)[0]
+        if (likely && likely.length <= 110) title = likely
+      }
+
+      title = title.replace(/\s+/g, ' ').replace(/^[^A-Z0-9]+|[^A-Z0-9)]+$/g, '').trim()
       if (title.length < 8) {
         setRecognizedText('')
         setTitleDraft('')
-        setError('Encontrei TAREFA, mas não consegui ler o nome completo ao lado. Aproxime a câmera e tente novamente.')
+        setError('Não consegui identificar com segurança o nome da APR. Envie uma foto mais próxima e nítida do campo onde o nome está digitado, sem cortar o texto.')
         return
       }
       setRecognizedText(title)
       setTitleDraft(title)
-      setStatus('Campo TAREFA localizado. Confira o texto antes de adicionar.')
+      setStatus('Nome da APR identificado. Confira o texto antes de adicionar ao protocolo.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não foi possível reconhecer o texto. Tente novamente.')
     } finally { setBusy(false); setProgress(0) }

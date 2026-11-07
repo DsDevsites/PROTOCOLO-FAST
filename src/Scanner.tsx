@@ -33,11 +33,17 @@ async function deletePage(id: string) {
   db.close()
 }
 function dateISO(value: string): string | null {
-  const match = value.match(/(^|\D)(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})(\D|$)/)
-  if (!match) return null
-  const day = Number(match[2]), month = Number(match[3]), rawYear = Number(match[4]), year = rawYear < 100 ? 2000 + rawYear : rawYear
-  const date = new Date(year, month-1, day)
-  if (date.getFullYear() !== year || date.getMonth() !== month-1 || date.getDate() !== day) return null
+  const numeric = value.match(/(^|\\D)(\\d{1,2})[\\/.\\-](\\d{1,2})[\\/.\\-](\\d{2,4})(\\D|$)/)
+  let day=0, month=0, year=0
+  if(numeric){day=Number(numeric[2]);month=Number(numeric[3]);const rawYear=Number(numeric[4]);year=rawYear<100?2000+rawYear:rawYear}
+  else {
+    const named=value.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().match(/(\\d{1,2})\\s+de\\s+([a-z]+)\\s+de\\s+(\\d{4})/)
+    if(!named)return null
+    const months=['janeiro','fevereiro','marco','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
+    day=Number(named[1]);month=months.indexOf(named[2])+1;year=Number(named[3])
+  }
+  const date=new Date(year,month-1,day)
+  if(!month||date.getFullYear()!==year||date.getMonth()!==month-1||date.getDate()!==day)return null
   return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
 }
 function formatDate(value: string) { if (!value) return 'Data não confirmada'; const [y,m,d]=value.split('-'); return `${d}/${m}/${y}` }
@@ -127,7 +133,7 @@ export default function Scanner({ onBack }: { onBack: () => void }) {
       const text=result.data.text
       const candidates=[...text.matchAll(/\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}/g)].map(m=>m[0])
       const candidate=candidates.map(v=>({raw:v,iso:dateISO(v)})).find(v=>v.iso)
-      const next={...page,suggestedDate:candidate?.iso??'',dateStatus:'pending' as const}
+      const next={...page,date:candidate?.iso??'',suggestedDate:candidate?.iso??'',dateStatus:'pending' as const}
       await savePage(next);setPages(current=>current.map(p=>p.id===page.id?next:p))
       setMessage(candidate? `Sugestão encontrada: ${formatDate(candidate.iso!)}. Confira e confirme manualmente.` : 'DATA NÃO IDENTIFICADA — CONFIRMAÇÃO NECESSÁRIA. Digite a data manualmente.')
     }catch(e){setError(e instanceof Error?e.message:'Não foi possível sugerir uma data.')}

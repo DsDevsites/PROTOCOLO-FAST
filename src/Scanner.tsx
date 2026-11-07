@@ -36,6 +36,8 @@ async function deletePage(id: string) {
   db.close()
 }
 function dateISO(value: string): string | null {
+  const iso=value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if(iso){const year=Number(iso[1]),month=Number(iso[2]),day=Number(iso[3]);const date=new Date(year,month-1,day);if(month&&date.getFullYear()===year&&date.getMonth()===month-1&&date.getDate()===day)return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`}
   const numeric = value.match(/(^|\\D)(\\d{1,2})[\\/.\\-](\\d{1,2})[\\/.\\-](\\d{2,4})(\\D|$)/)
   let day=0, month=0, year=0
   if(numeric){day=Number(numeric[2]);month=Number(numeric[3]);const rawYear=Number(numeric[4]);year=rawYear<100?2000+rawYear:rawYear}
@@ -102,7 +104,7 @@ export default function Scanner({ onBack }: { onBack: () => void }) {
   useEffect(()=>()=>{streamRef.current?.getTracks().forEach(t=>t.stop())},[])
 
   const pending=pages.filter(p=>p.dateStatus!=='confirmed')
-  const ordered=useMemo(()=>[...pages].sort((a,b)=>a.dateStatus==='confirmed'&&b.dateStatus==='confirmed'?a.date.localeCompare(b.date):a.dateStatus==='confirmed'?-1:b.dateStatus==='confirmed'?1:a.createdAt-b.createdAt),[pages])
+  const ordered=useMemo(()=>[...pages].sort((a,b)=>{const da=a.date||a.suggestedDate,db=b.date||b.suggestedDate;if(da&&db)return da.localeCompare(db)||a.createdAt-b.createdAt;if(da)return -1;if(db)return 1;return a.createdAt-b.createdAt}),[pages])
 
   async function startCamera(){
     setError('')
@@ -133,7 +135,7 @@ export default function Scanner({ onBack }: { onBack: () => void }) {
       ctx.drawImage(image,cropArea.x,cropArea.y,cropArea.width,cropArea.height,0,0,canvas.width,canvas.height)
       const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Falha ao salvar o recorte.')),'image/jpeg',0.94))
       const page:PageRecord={id:makeId(),name:item.file.name||`Página ${pages.length+1}`,blob,date:'',suggestedDate:'',dateStatus:'pending',createdAt:Date.now()+pages.length,rotation:0,filter:'color'}
-      await savePage(page);setPages(current=>[...current,page])
+      await savePage(page);setPages(current=>[...current,page]);void recognizeDateAutomatically(page)
       URL.revokeObjectURL(item.url)
       const next=reviewQueue.filter((_,index)=>index!==reviewIndex)
       setReviewQueue(next);setReviewIndex(0);setCrop({x:0,y:0});setZoom(1);setCropArea(null)
@@ -167,6 +169,47 @@ export default function Scanner({ onBack }: { onBack: () => void }) {
       setMessage(candidate? `Sugestão encontrada: ${formatDate(candidate.iso!)}. Confira e confirme manualmente.` : 'DATA NÃO IDENTIFICADA — CONFIRMAÇÃO NECESSÁRIA. Digite a data manualmente.')
     }catch(e){setError(e instanceof Error?e.message:'Não foi possível sugerir uma data.')}
     finally{setBusy(false)}
+  }
+  async function recognizeDateAutomatically(page:PageRecord){
+    let worker:Awaited<ReturnType<typeof import('tesseract.js')['createWorker']>>|null=null
+    try{
+      const {createWorker}=await import('tesseract.js')
+      worker=await createWorker('por')
+      const result=await worker.recognize(page.blob)
+      const text=result.data.text.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      const numeric=[...text.matchAll(/\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}/g)].map(m=>m[0])
+      const iso=[...text.matchAll(/\b\d{4}-\d{1,2}-\d{1,2}\b/g)].map(m=>m[0])
+      const named=[...text.matchAll(/\d{1,2}\s+de\s+[a-z]+\s+de\s+\d{4}/gi)].map(m=>m[0])
+      const candidate=[...numeric,...iso,...named].map(raw=>dateISO(raw)).find((value):value is string=>Boolean(value))
+      if(candidate){
+        const latest=(await loadPages()).find(p=>p.id===page.id)
+        if(latest&&!latest.date&&!latest.suggestedDate){
+          const updated={...latest,date:candidate,suggestedDate:candidate,dateStatus:'pending' as const}
+          await savePage(updated)
+          setPages(current=>current.map(p=>p.id===page.id?updated:p))
+          setMessage(`Data identificada automaticamente: ${formatDate(candidate)}. A página já foi posicionada na ordem cronológica; confira o resultado.`)
+        }
+      }else setMessage(`Não consegui identificar a data de “${page.name}”. Você pode informar no campo de data.`)
+    }catch{
+      setMessage('A leitura automática da data não foi concluída. Você ainda pode informar a data manualmente.')
+    }finally{if(worker)await worker.terminate()}
+  }
+  async function recognizeAllDates(){
+    const targets=pages.filter(p=>!p.date&&!p.suggestedDate)
+    if(!targets.length){setMessage('Todas as páginas já possuem uma data preenchida.');return}
+    setBusy(true);setError('')
+    for(let i=0;i<targets.length;i++){
+      setMessage(`Lendo datas automaticamente: ${i+1} de ${targets.length}…`)
+      await recognizeDateAutomatically(targets[i])
+    }
+    setBusy(false);setMessage('Leitura automática concluída. As páginas com data foram organizadas da mais antiga para a mais recente.')
+  }
+  async function deleteAllPages(){
+    if(!pages.length)return
+    if(!confirm(`Apagar definitivamente todas as ${pages.length} páginas digitalizadas deste aparelho? Esta ação não pode ser desfeita.`))return
+    const db=await openDb()
+    await new Promise<void>((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).clear();tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})
+    db.close();setPages([]);setMessage('Todas as páginas digitalizadas foram apagadas.')
   }
   async function updatePage(page:PageRecord,patch:Partial<PageRecord>){
     const next={...page,...patch};await savePage(next);setPages(current=>current.map(p=>p.id===page.id?next:p))
@@ -235,11 +278,11 @@ export default function Scanner({ onBack }: { onBack: () => void }) {
       {!!reviewQueue.length&&<div className="crop-review-panel"><div className="camera-head"><strong><ScanLine size={16}/> REVISAR E RECORTAR • {reviewIndex+1} DE {reviewQueue.length}</strong><button className="icon-button" onClick={discardReview}><X/></button></div><p className="crop-help">Arraste a imagem para centralizar a folha dentro do quadro. Amplie ou reduza e escolha o formato do recorte.</p><div className="crop-stage"><Cropper image={reviewQueue[reviewIndex].url} crop={crop} zoom={zoom} aspect={cropAspect} onCropChange={setCrop} onZoomChange={setZoom} onCropComplete={(_croppedArea:Area,area:Area)=>setCropArea(area)} restrictPosition={false} showGrid/></div><div className="crop-controls"><label>FORMATO DO RECORTE<select value={cropAspect} onChange={e=>setCropAspect(Number(e.target.value))}><option value={0.707}>A4 vertical</option><option value={1}>Quadrado</option><option value={1.414}>A4 horizontal</option></select></label><label>ZOOM <input type="range" min="1" max="3" step="0.05" value={zoom} onChange={e=>setZoom(Number(e.target.value))}/></label></div><div className="crop-actions"><button className="secondary-button" onClick={discardReview}>DESCARTAR ESTA IMAGEM</button><button className="action-button" disabled={busy||!cropArea} onClick={()=>void confirmCrop()}><Check size={16}/> CONFIRMAR RECORTE</button></div></div>}
       <div className="scanner-note"><FileText size={18}/><div><strong>Preservação do original</strong><p>As imagens ficam armazenadas localmente neste navegador. A data sugerida nunca é confirmada automaticamente.</p></div></div>
     </section>}
-    {tab==='library'&&<section className="protocol"><div className="section-heading"><div><span className="step">02</span><div><h2>Documentos digitalizados</h2><p>Confirme as datas e organize em ordem cronológica.</p></div></div><span className="count-pill">{pages.length} PÁGINAS</span></div>
-      {!ordered.length?<div className="empty-state"><span><FileImage/></span><strong>Nenhuma página digitalizada</strong><p>Comece adicionando imagens ou fotografando o caderno.</p></div>:<div className="scan-page-list">{ordered.map(page=><article className="scan-page-card" key={page.id}><div className="scan-thumb"><img src={thumbUrls[page.id] || ""} alt={page.name} style={{transform:"rotate("+page.rotation+"deg)",filter:page.filter==="gray"?"grayscale(1)":page.filter==="bw"?"grayscale(1) contrast(2.1)":"none"}}/></div><div className="scan-page-info"><strong>{page.name}</strong><label>DATA DO REGISTRO</label><input type="date" value={page.date||page.suggestedDate} onChange={e=>void updatePage(page,{date:e.target.value,dateStatus:'pending'})}/><div className="scan-status">{page.dateStatus==='confirmed'?'DATA CONFIRMADA':'CONFIRMAÇÃO NECESSÁRIA'}</div><label>TRATAMENTO DA IMAGEM</label><select className="scan-filter" value={page.filter} onChange={e=>void updatePage(page,{filter:e.target.value as PageRecord['filter']})}><option value="color">Colorido</option><option value="gray">Escala de cinza</option><option value="bw">Preto e branco</option></select><div className="scan-row-actions"><button className="secondary-button" disabled={busy} onClick={()=>void suggestDate(page)}>SUGERIR DATA (OCR)</button><button className="action-button" disabled={!page.date} onClick={()=>void updatePage(page,{dateStatus:'confirmed'})}><Check size={14}/> CONFIRMAR</button></div></div><div className="scan-tools"><button title="Girar" onClick={()=>void updatePage(page,{rotation:(page.rotation+90)%360})}><RotateCw size={15}/></button><button title="Mover para cima" onClick={()=>movePage(page,-1)}><ArrowUp size={15}/></button><button title="Mover para baixo" onClick={()=>movePage(page,1)}><ArrowDown size={15}/></button><button title="Baixar PDF desta página" onClick={()=>void makePdf([page],`REVEZAMENTO-${page.date||'SEM-DATA'}.pdf`)}><Download size={15}/></button><button title="Excluir" onClick={()=>void removePage(page)}><Trash2 size={15}/></button></div></article>)}</div>}
-      {!!pages.length&&<div className="card-actions"><span>{pages.filter(p=>p.dateStatus==='confirmed').length} datas confirmadas</span><button className="action-button" disabled={busy} onClick={()=>void makePdf(ordered,`CADERNO-REVEZAMENTO-${new Date().toISOString().slice(0,10)}.pdf`)}><Download size={16}/> EXPORTAR TODAS EM PDF</button></div>}
+    {tab==='library'&&<section className="protocol"><div className="section-heading"><div><span className="step">02</span><div><h2>Documentos digitalizados</h2><p>Datas identificadas e páginas em ordem cronológica automática.</p></div></div><span className="count-pill">{pages.length} PÁGINAS</span></div>
+      {!ordered.length?<div className="empty-state"><span><FileImage/></span><strong>Nenhuma página digitalizada</strong><p>Comece adicionando imagens ou fotografando o caderno.</p></div>:<div className="scan-page-list">{ordered.map(page=><article className="scan-page-card" key={page.id}><div className="scan-thumb"><img src={thumbUrls[page.id] || ""} alt={page.name} style={{transform:"rotate("+page.rotation+"deg)",filter:page.filter==="gray"?"grayscale(1)":page.filter==="bw"?"grayscale(1) contrast(2.1)":"none"}}/></div><div className="scan-page-info"><strong>{page.name}</strong><label className="date-field-label">DATA DO REGISTRO</label><input className="scan-date-input" type="date" value={page.date||page.suggestedDate} onChange={e=>void updatePage(page,{date:e.target.value,suggestedDate:'',dateStatus:'pending'})}/><div className="scan-status">{page.dateStatus==='confirmed'?'DATA CONFIRMADA':page.suggestedDate?'DATA LIDA AUTOMATICAMENTE • CONFIRA':'DATA PENDENTE • LEITURA OU PREENCHIMENTO'}</div><label>TRATAMENTO DA IMAGEM</label><select className="scan-filter" value={page.filter} onChange={e=>void updatePage(page,{filter:e.target.value as PageRecord['filter']})}><option value="color">Colorido</option><option value="gray">Escala de cinza</option><option value="bw">Preto e branco</option></select><div className="scan-row-actions"><button className="secondary-button" disabled={busy} onClick={()=>void suggestDate(page)}>SUGERIR DATA (OCR)</button><button className="action-button" disabled={!page.date} onClick={()=>void updatePage(page,{dateStatus:'confirmed'})}><Check size={14}/> CONFIRMAR</button></div></div><div className="scan-tools"><button title="Girar" onClick={()=>void updatePage(page,{rotation:(page.rotation+90)%360})}><RotateCw size={15}/></button><button title="Mover para cima" onClick={()=>movePage(page,-1)}><ArrowUp size={15}/></button><button title="Mover para baixo" onClick={()=>movePage(page,1)}><ArrowDown size={15}/></button><button title="Baixar PDF desta página" onClick={()=>void makePdf([page],`REVEZAMENTO-${page.date||'SEM-DATA'}.pdf`)}><Download size={15}/></button><button title="Excluir" onClick={()=>void removePage(page)}><Trash2 size={15}/></button></div></article>)}</div>}
+      {!!pages.length&&<div className="card-actions scanner-library-actions"><span>{pages.filter(p=>p.date||p.suggestedDate).length} datas identificadas • ordem crescente</span><div><button className="secondary-button" disabled={busy} onClick={()=>void recognizeAllDates()}><ScanLine size={15}/> LER DATAS PENDENTES</button><button className="secondary-button danger-outline" disabled={busy} onClick={()=>void deleteAllPages()}><Trash2 size={15}/> APAGAR TODAS</button><button className="action-button" disabled={busy} onClick={()=>void makePdf(ordered,`CADERNO-REVEZAMENTO-${new Date().toISOString().slice(0,10)}.pdf`)}><Download size={16}/> EXPORTAR TODAS EM PDF</button></div></div>}
     </section>}
-    {tab==='merge'&&<section className="workspace"><div className="section-heading"><div><span className="step">03</span><div><h2>Unir documentos PDF</h2><p>Adicione arquivos e organize a ordem antes de juntar.</p></div></div></div><button className="action-button" onClick={()=>mergeInput.current?.click()}><FilePlus2 size={17}/> ADICIONAR PDFs</button><input ref={mergeInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={async e=>{if(e.target.files){try{const records=await Promise.all(Array.from(e.target.files).map(readPdf));setPdfFiles(v=>[...v,...records]);setError('')}catch(err){setError(err instanceof Error?err.message:'PDF inválido')}e.currentTarget.value=''}}}/><div className="pdf-list">{pdfFiles.map((f,i)=><div key={f.id}><FileText size={18}/><span>{f.name}<small>{f.pages} páginas</small></span><button onClick={()=>setPdfFiles(v=>v.filter(x=>x.id!==f.id))}><Trash2 size={15}/></button><button disabled={i===0} onClick={()=>setPdfFiles(v=>{const a=[...v];[a[i-1],a[i]]=[a[i],a[i-1]];return a})}><ArrowUp size={15}/></button><button disabled={i===pdfFiles.length-1} onClick={()=>setPdfFiles(v=>{const a=[...v];[a[i+1],a[i]]=[a[i],a[i+1]];return a})}><ArrowDown size={15}/></button></div>)}</div><button className="action-button full" disabled={pdfFiles.length<2||busy} onClick={()=>void mergePdfs()}><Merge size={17}/> UNIR PDFs</button></section>}
+    {tab==='merge'&&<section className="workspace"><div className="section-heading"><div><span className="step">03</span><div><h2>Unir documentos PDF</h2><p>Adicione arquivos e organize a ordem antes de juntar.</p></div></div></div><button className="action-button" onClick={()=>mergeInput.current?.click()}><FilePlus2 size={17}/> ADICIONAR PDFs</button><input ref={mergeInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={async e=>{if(e.target.files){try{const records=await Promise.all(Array.from(e.target.files).map(readPdf));setPdfFiles(v=>[...v,...records]);setError('')}catch(err){setError(err instanceof Error?err.message:'PDF inválido')}e.currentTarget.value=''}}}/><div className="pdf-list">{pdfFiles.map((f,i)=><div key={f.id}><FileText size={18}/><span>{f.name}<small>{f.pages} páginas</small></span><button onClick={()=>setPdfFiles(v=>v.filter(x=>x.id!==f.id))}><Trash2 size={15}/></button><button disabled={i===0} onClick={()=>setPdfFiles(v=>{const a=[...v];[a[i-1],a[i]]=[a[i],a[i-1]];return a})}><ArrowUp size={15}/></button><button disabled={i===pdfFiles.length-1} onClick={()=>setPdfFiles(v=>{const a=[...v];[a[i+1],a[i]]=[a[i],a[i+1]];return a})}><ArrowDown size={15}/></button></div>)}</div>{!!pdfFiles.length&&<button className="secondary-button danger-outline clear-pdf-list" onClick={()=>{if(confirm('Remover todos os PDFs desta lista?'))setPdfFiles([])}}><Trash2 size={15}/> LIMPAR TODOS OS PDFs DA LISTA</button>}<button className="action-button full" disabled={pdfFiles.length<2||busy} onClick={()=>void mergePdfs()}><Merge size={17}/> UNIR PDFs</button></section>}
     {tab==='split'&&<section className="workspace"><div className="section-heading"><div><span className="step">04</span><div><h2>Separar PDF</h2><p>Extraia páginas específicas sem alterar o original.</p></div></div></div><button className="action-button" onClick={()=>splitInput.current?.click()}><Upload size={17}/> ESCOLHER PDF</button><input ref={splitInput} hidden type="file" accept="application/pdf,.pdf" onChange={async e=>{const file=e.target.files?.[0];if(file){try{setSplitFile(await readPdf(file));setError('')}catch(err){setError(err instanceof Error?err.message:'PDF inválido')}}e.currentTarget.value=''}}/>{splitFile&&<div className="split-panel"><strong>{splitFile.name}</strong><p>{splitFile.pages} páginas disponíveis.</p><label>Informe páginas e intervalos (ex.: 1, 3-5, 8)</label><input className="title-input" value={range} onChange={e=>setRange(e.target.value)}/><button className="action-button full" onClick={()=>void splitPdf()} disabled={busy}><Split size={16}/> GERAR PDF SEPARADO</button></div>}</section>}
     <footer><span>NEXO OPERACIONAL</span><span>SCANNER • ARQUIVOS LOCAIS</span></footer>
   </main>

@@ -1,15 +1,15 @@
-import { ArrowRight, FileImage, ShieldCheck, Zap } from 'lucide-react'
+import { ArrowRight, FileImage, ScanLine, ShieldCheck, Zap } from 'lucide-react'
 
-export default function Home({ onSelect }: { onSelect: (module: 'protocol' | 'cards') => void }) {
+export default function Home({ onSelect }: { onSelect: (module: 'protocol' | 'cards' | 'scanner') => void }) {
   return <main className="app-shell home-shell">
     <header className="topbar">
-      <a className="brand" href="#" aria-label="PROTOCOLO FAST início"><span className="brand-mark"><Zap size={22} fill="currentColor"/></span><span><strong>PROTOCOLO<span> FAST</span></strong><small>FERRAMENTAS OPERACIONAIS</small></span></a>
+      <a className="brand" href="#" aria-label="NEXO Operacional início"><span className="brand-mark"><Zap size={22} fill="currentColor"/></span><span><strong>NEXO<span> OPERACIONAL</span></strong><small>CENTRAL INTELIGENTE DE FERRAMENTAS</small></span></a>
       <div className="secure"><ShieldCheck size={15}/> AMBIENTE DE TRABALHO</div>
     </header>
     <section className="home-hero">
       <div className="eyebrow"><span className="pulse"/> CENTRAL DE FERRAMENTAS</div>
-      <h1>O que vamos<br/><em>organizar hoje?</em></h1>
-      <p>Escolha uma ferramenta para continuar. Cada sistema tem seu próprio espaço e suas funções independentes.</p>
+      <h1>NEXO<br/><em>Operacional.</em></h1>
+      <p>Central inteligente de ferramentas operacionais. Escolha uma solução para organizar, digitalizar e processar seus documentos.</p>
     </section>
     <section className="module-grid">
       <button className="module-card module-fast" onClick={() => onSelect('protocol')}>
@@ -18,7 +18,10 @@ export default function Home({ onSelect }: { onSelect: (module: 'protocol' | 'ca
       <button className="module-card module-cards" onClick={() => onSelect('cards')}>
         <span className="module-icon"><FileImage size={28}/></span><span className="module-kicker">02 / DOCUMENTOS</span><strong>CARTEIRINHAS</strong><p>Organize prints em folhas A4 com seis carteirinhas por página e gere um PDF pronto para impressão.</p><span className="module-link">ABRIR SISTEMA <ArrowRight size={17}/></span>
       </button>
+      <button className="module-card module-scanner" onClick={() => onSelect('scanner')}>
+        <span className="module-icon"><ScanLine size={28}/></span><span className="module-kicker">03 / DIGITALIZAÇÃO</span><strong>SCANNER DE DOCUMENTOS</strong><p>Digitalize páginas do caderno de revezamento, revise datas, organize documentos e gerencie PDFs.</p><span className="module-link">ABRIR SISTEMA <ArrowRight size={17}/></span>
+      </button>
     </section>
-    <footer><span>PROTOCOLO FAST</span><span>DUAS FERRAMENTAS • UM ÚNICO ENDEREÇO</span></footer>
+    <footer><span>NEXO OPERACIONAL</span><span>TRÊS FERRAMENTAS • UM ÚNICO ENDEREÇO</span></footer>
   </main>
 }

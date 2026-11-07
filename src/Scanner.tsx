@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowLeft, ArrowUp, Camera, Check, ChevronDown, ChevronUp, Download, FileImage, FilePlus2, FileText, FolderOpen, ImagePlus, LoaderCircle, Merge, RotateCw, ScanLine, Share2, Split, Trash2, Upload, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowDown, ArrowLeft, ArrowUp, Camera, Check, Download, FileImage, FilePlus2, FileText, FolderOpen, ImagePlus, LoaderCircle, Merge, RotateCw, ScanLine, Split, Trash2, Upload, X } from 'lucide-react'
 import { PDFDocument } from 'pdf-lib'
 
 type PageRecord = { id: string; name: string; blob: Blob; date: string; suggestedDate: string; dateStatus: 'pending' | 'confirmed' | 'unread'; createdAt: number; rotation: number; filter: 'color' | 'gray' | 'bw' }
@@ -66,7 +66,6 @@ export default function Scanner({ onBack }: { onBack: () => void }) {
   const [message,setMessage]=useState('')
   const [error,setError]=useState('')
   const [camera,setCamera]=useState(false)
-  const [rotationPreview,setRotationPreview]=useState(0)
   const [pdfFiles,setPdfFiles]=useState<PdfRecord[]>([])
   const [splitFile,setSplitFile]=useState<PdfRecord|null>(null)
   const [range,setRange]=useState('1')

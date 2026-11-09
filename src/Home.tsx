@@ -1,6 +1,6 @@
-import { ArrowRight, FileImage, FileText, ScanLine, ShieldCheck, Zap } from 'lucide-react'
+import { ArrowRight, FileImage, FileText, ScanLine, ShieldCheck, Zap, Files } from 'lucide-react'
 
-export default function Home({ onSelect }: { onSelect: (module: 'protocol' | 'cards' | 'scanner' | 'pdf') => void }) {
+export default function Home({ onSelect }: { onSelect: (module: 'protocol' | 'cards' | 'scanner' | 'pdf' | 'office') => void }) {
   return <main className="app-shell home-shell">
     <header className="topbar">
       <a className="brand" href="#" aria-label="NEXO Operacional início"><span className="brand-mark"><Zap size={22} fill="currentColor"/></span><span><strong>NEXO<span> OPERACIONAL</span></strong><small>CENTRAL INTELIGENTE DE FERRAMENTAS</small></span></a>
@@ -21,8 +21,9 @@ export default function Home({ onSelect }: { onSelect: (module: 'protocol' | 'ca
       <button className="module-card module-scanner" onClick={() => onSelect('scanner')}>
         <span className="module-icon"><ScanLine size={28}/></span><span className="module-kicker">03 / DIGITALIZAÇÃO</span><strong>SCANNER DE DOCUMENTOS</strong><p>Digitalize páginas do caderno de revezamento, revise datas, organize documentos e gerencie PDFs.</p><span className="module-link">ABRIR SISTEMA <ArrowRight size={17}/></span>
       </button>
+      <button className="module-card module-office" onClick={() => onSelect("office")}><span className="module-icon"><Files size={28}/></span><span className="module-kicker">05 / CONVERSÃO</span><strong>WORD • EXCEL • POWERPOINT</strong><p>Visualize planilhas, extraia conteúdo de documentos e converta imagens e PDFs.</p><span className="module-link">ABRIR SISTEMA <ArrowRight size={17}/></span></button>
       <button className="module-card module-pdf" onClick={() => onSelect('pdf')}><span className="module-icon"><FileText size={28}/></span><span className="module-kicker">04 / DOCUMENTOS</span><strong>ORGANIZADOR DE PDF</strong><p>Una, organize, anote, assine e adicione elementos aos seus documentos PDF.</p><span className="module-link">ABRIR SISTEMA <ArrowRight size={17}/></span></button>
     </section>
-    <footer><span>NEXO OPERACIONAL</span><span>QUATRO FERRAMENTAS • UM ÚNICO ENDEREÇO</span></footer>
+    <footer><span>NEXO OPERACIONAL</span><span>CINCO FERRAMENTAS • UM ÚNICO ENDEREÇO</span></footer>
   </main>
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PDFDocument, degrees } from 'pdf-lib'
+import JSZip from 'jszip'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { ArrowLeft, Scissors, ZoomIn, Download, LoaderCircle } from 'lucide-react'
 import './PdfSplitStudio.css'
@@ -73,6 +74,10 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
         }
       })
       const baseName = fileName.replace(/\.pdf$/i, '') || 'documento'
+      const zip = new JSZip()
+      const outputFolder = zip.folder(baseName + '-partes')
+      if (!outputFolder) throw new Error('Não foi possível criar a pasta dos PDFs.')
+
       for (let index = 0; index < groups.length; index++) {
         const output = await PDFDocument.create()
         const group = groups[index]
@@ -83,17 +88,34 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
           output.addPage(page)
         })
         const bytes = await output.save()
-        const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
+        const partName = baseName + '-parte-' + String(index + 1).padStart(2, '0') + '.pdf'
+        outputFolder.file(partName, bytes)
+      }
+
+      if (groups.length === 1) {
+        const singlePdf = await outputFolder.file(baseName + '-parte-01.pdf')?.async('blob')
+        if (!singlePdf) throw new Error('Não foi possível preparar o PDF.')
+        const url = URL.createObjectURL(singlePdf)
         const link = document.createElement('a')
         link.href = url
-        link.download = groups.length === 1 ? baseName + '-parte-1.pdf' : baseName + '-parte-' + String(index + 1).padStart(2, '0') + '.pdf'
+        link.download = baseName + '-parte-01.pdf'
         document.body.appendChild(link)
         link.click()
         link.remove()
-        window.setTimeout(() => URL.revokeObjectURL(url), 4000)
-        if (index < groups.length - 1) await new Promise(resolve => window.setTimeout(resolve, 350))
+        window.setTimeout(() => URL.revokeObjectURL(url), 10000)
+      } else {
+        setMessage('Compactando ' + groups.length + ' PDFs em uma pasta…')
+        const archive = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } })
+        const url = URL.createObjectURL(archive)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = baseName + '-partes.zip'
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.setTimeout(() => URL.revokeObjectURL(url), 10000)
       }
-      setMessage('Divisão concluída: ' + groups.length + ' PDF(s) gerado(s).')
+      setMessage(groups.length > 1 ? 'Concluído! ' + groups.length + ' PDFs organizados na pasta ' + baseName + '-partes.zip.' : 'Divisão concluída: 1 PDF gerado.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Não foi possível dividir o PDF.')
     } finally {

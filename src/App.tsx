@@ -3,6 +3,7 @@ import Home from './Home'
 import CardPrint from './CardPrint'
 import Scanner from './Scanner'
 import PdfOrganizer from './PdfOrganizer'
+import OfficeTools from './OfficeTools'
 import {
   AlertCircle, Camera, Check, CheckCircle2, ChevronDown, ChevronUp, ClipboardList,
   Download, ImagePlus, LoaderCircle, Minus, Plus, RotateCcw, Search,
@@ -21,7 +22,7 @@ function normalizeTitle(value: string) {
 function makeId() { return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}` }
 
 export default function App() {
-  const [activeModule, setActiveModule] = useState<'home' | 'protocol' | 'cards' | 'scanner' | 'pdf'>('home')
+  const [activeModule, setActiveModule] = useState<'home' | 'protocol' | 'cards' | 'scanner' | 'pdf' | 'office'>('home')
   const [entries, setEntries] = useState<Entry[]>(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') as Entry[] } catch { return [] }
   })
@@ -358,6 +359,7 @@ export default function App() {
   if (activeModule === 'cards') return <CardPrint onBack={() => setActiveModule('home')} />
   if (activeModule === 'scanner') return <Scanner onBack={() => setActiveModule('home')} />
   if (activeModule === 'pdf') return <PdfOrganizer onBack={() => setActiveModule('home')} />
+  if (activeModule === 'office') return <OfficeTools onBack={() => setActiveModule('home')} />
 
   return (
     <main className="app-shell">

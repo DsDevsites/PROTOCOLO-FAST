@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib'
+import { createWorker } from 'tesseract.js'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { ArrowLeft, ChevronLeft, ChevronRight, Download, FilePlus2, ImagePlus, MousePointer2, RectangleHorizontal, Signature, Trash2, Type, Upload, ZoomIn, ZoomOut, RotateCcw, RotateCw, Files, Scissors, Copy, Plus, ArrowUp, ArrowDown } from 'lucide-react'
@@ -25,6 +26,8 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [extractedText, setExtractedText] = useState('')
+  const [ocrProgress, setOcrProgress] = useState(0)
   const [color, setColor] = useState('#f97316')
   const [fontSize, setFontSize] = useState(18)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -133,6 +136,62 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
     const stop = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop) }
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop)
     setSelected(mark.id)
+  }
+
+  function downloadText(text: string, suffix: string) {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = (fileName.replace(/\\.pdf$/i, '') || 'documento') + suffix + '.txt'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+  async function extractPdfText() {
+    if (!pdf) return
+    setBusy(true); setMessage('Extraindo texto incorporado ao PDF…')
+    try {
+      const chunks: string[] = []
+      for (let displayIndex = 0; displayIndex < pageOrder.length; displayIndex++) {
+        const sourceIndex = pageOrder[displayIndex]
+        const current = await pdf.getPage(sourceIndex)
+        const content = await current.getTextContent()
+        const pageText = content.items.map(item => 'str' in item ? item.str : '').join(' ').replace(/[ \\t]+/g, ' ').trim()
+        chunks.push('--- Página ' + (displayIndex + 1) + ' ---\\n' + pageText)
+      }
+      const text = chunks.join('\\n\\n')
+      setExtractedText(text)
+      if (text.trim()) { downloadText(text, '-texto-extraido'); setMessage('Texto extraído e arquivo TXT baixado.') }
+      else setMessage('Não foi encontrado texto selecionável. Este PDF pode ser digitalizado; tente o OCR.')
+    } catch (e) { setMessage(e instanceof Error ? e.message : 'Falha ao extrair texto do PDF.') }
+    finally { setBusy(false) }
+  }
+  async function runOcr() {
+    if (!pdf) return
+    setBusy(true); setOcrProgress(0); setMessage('Iniciando OCR em português…')
+    let worker: Awaited<ReturnType<typeof createWorker>> | null = null
+    try {
+      worker = await createWorker('por', 1, { logger: event => { if (event.status === 'recognizing text') setOcrProgress(Math.round((event.progress || 0) * 100)) } })
+      const chunks: string[] = []
+      for (let displayIndex = 0; displayIndex < pageOrder.length; displayIndex++) {
+        setMessage('OCR: processando página ' + (displayIndex + 1) + ' de ' + pageOrder.length + '…')
+        const current = await pdf.getPage(pageOrder[displayIndex])
+        const viewport = current.getViewport({ scale: 1.8 })
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height)
+        const context = canvas.getContext('2d')
+        if (!context) throw new Error('Não foi possível preparar a página para OCR.')
+        await current.render({ canvasContext: context, viewport }).promise
+        const result = await worker.recognize(canvas)
+        chunks.push('--- Página ' + (displayIndex + 1) + ' ---\\n' + result.data.text.trim())
+        canvas.width = 0; canvas.height = 0
+        setOcrProgress(Math.round(((displayIndex + 1) / pageOrder.length) * 100))
+      }
+      const text = chunks.join('\\n\\n')
+      setExtractedText(text); downloadText(text, '-ocr')
+      setMessage('OCR concluído. Texto reconhecido e arquivo TXT baixado.')
+    } catch (e) { setMessage(e instanceof Error ? 'Erro no OCR: ' + e.message : 'Não foi possível executar o OCR.') }
+    finally { if (worker) await worker.terminate(); setBusy(false) }
   }
   async function exportPdf() {
     if (!pdf) return
@@ -314,6 +373,17 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
         </div>
         <div className="pdf-page-select"><span>{selectedPages.length ? selectedPages.length+' página(s) selecionada(s)' : 'Página atual selecionada para operações'}</span><button onClick={()=>setSelectedPages(pageOrder.map((_,i)=>i+1))}>Selecionar todas</button><button onClick={()=>setSelectedPages([])}>Limpar seleção</button></div>
         <div className="pdf-page-strip">{pageOrder.map((sourcePage,index)=><button key={index} className={'pdf-page-chip '+(page===index+1?'current ':'')+(selectedPages.includes(index+1)?'checked':'')} onClick={()=>setPage(index+1)} title="Clique para abrir; use o botão + para selecionar"><span className="pdf-page-number">{index+1}</span><small>Página {index+1}</small>{rotations[sourcePage]?<em>{rotations[sourcePage]}°</em>:null}<span className="pdf-page-check" onClick={e=>{e.stopPropagation();togglePageSelection(index+1)}}>{selectedPages.includes(index+1)?'✓':'+'}</span></button>)}</div>
+      </div>
+
+      <div className="pdf-text-tools">
+        <div><strong>EXTRAÇÃO DE TEXTO E OCR</strong><small>Extraia texto pesquisável ou reconheça texto em páginas digitalizadas.</small></div>
+        <div className="pdf-text-actions">
+          <button disabled={busy} onClick={()=>void extractPdfText()}>Extrair texto do PDF</button>
+          <button disabled={busy} onClick={()=>void runOcr()}>Executar OCR em português</button>
+          {extractedText && <button onClick={()=>downloadText(extractedText,'-texto')}>Baixar TXT novamente</button>}
+        </div>
+        {busy && ocrProgress>0 && <div className="pdf-ocr-progress"><span style={{width:ocrProgress+'%'}}/></div>}
+        {extractedText && <details className="pdf-text-result"><summary>Visualizar texto extraído ({extractedText.length.toLocaleString('pt-BR')} caracteres)</summary><pre>{extractedText.slice(0,12000)}{extractedText.length>12000?'\\n… conteúdo continua no arquivo TXT':''}</pre></details>}
       </div>
       <div className="pdf-instructions">{tool==='text'?'Toque na página para inserir um texto.':tool==='rect'?'Toque na página para adicionar um retângulo.':tool==='signature'?'Desenhe sua assinatura diretamente sobre a página.':tool==='image'?'Escolha uma imagem nos arquivos.':'Selecione e arraste os elementos adicionados.'}</div>
       <div className="pdf-stage-scroll"><div className="pdf-stage" ref={stageRef} onClick={addMark} onPointerDown={startSignature} onPointerMove={moveSignature} onPointerUp={endSignature} onPointerCancel={endSignature} style={{width:stageSize.width,height:stageSize.height,cursor:tool==='text'||tool==='rect'?'crosshair':tool==='signature'?'crosshair':'default'}}>

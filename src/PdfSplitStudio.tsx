@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { PDFDocument, degrees } from 'pdf-lib'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { ArrowLeft, Scissors, ZoomIn, Download, LoaderCircle } from 'lucide-react'
@@ -13,36 +13,57 @@ type Props = {
 }
 
 export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, onClose }: Props) {
-  const [thumbnails, setThumbnails] = useState<Record<number, string>>({})
+  const previewContainerRef = useRef<HTMLDivElement>(null)
+  const [previewErrors, setPreviewErrors] = useState<Record<number, string>>({})
   const [pageMode, setPageMode] = useState(true)
   const [cuts, setCuts] = useState<number[]>([])
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
 
+  // Render directly into the canvases displayed by React. This avoids data-URL
+  // conversion and detached-canvas timing issues that caused broken previews.
   useEffect(() => {
     let cancelled = false
-    async function renderThumbnails() {
+    let activeTask: ReturnType<Awaited<ReturnType<typeof pdf.getPage>>['render']> | null = null
+
+    async function renderPreviews() {
+      setPreviewErrors({})
       for (let index = 0; index < pageOrder.length; index++) {
-        const sourceIndex = pageOrder[index]
+        if (cancelled) return
+        const canvas = previewContainerRef.current?.querySelector<HTMLCanvasElement>(`canvas[data-pdf-page-index="${index}"]`)
+        if (!canvas) continue
         try {
-          const page = await pdf.getPage(sourceIndex)
-          const viewport = page.getViewport({ scale: 0.34, rotation: (page.rotate + (rotations[sourceIndex] || 0)) % 360 })
-          const canvas = document.createElement('canvas')
-          canvas.width = Math.ceil(viewport.width)
-          canvas.height = Math.ceil(viewport.height)
-          const context = canvas.getContext('2d')
-          if (!context) continue
-          await page.render({ canvasContext: context, viewport }).promise
-          if (!cancelled) setThumbnails(current => ({ ...current, [index]: canvas.toDataURL('image/jpeg', 0.82) }))
-          canvas.width = 0
-          canvas.height = 0
-        } catch {
-          if (!cancelled) setMessage('Não foi possível gerar a miniatura da página ' + (index + 1) + '.')
+          const sourcePage = pageOrder[index]
+          const page = await pdf.getPage(sourcePage)
+          if (cancelled) return
+          const viewport = page.getViewport({
+            scale: 0.42,
+            rotation: (page.rotate + (rotations[sourcePage] || 0)) % 360
+          })
+          canvas.width = Math.max(1, Math.ceil(viewport.width))
+          canvas.height = Math.max(1, Math.ceil(viewport.height))
+          const context = canvas.getContext('2d', { alpha: false })
+          if (!context) throw new Error('Navegador não conseguiu criar o canvas.')
+          context.fillStyle = '#ffffff'
+          context.fillRect(0, 0, canvas.width, canvas.height)
+          activeTask = page.render({ canvasContext: context, viewport })
+          await activeTask.promise
+          activeTask = null
+          if (!cancelled) canvas.dataset.ready = 'true'
+        } catch (error) {
+          if (cancelled) return
+          const reason = error instanceof Error ? error.message : 'Falha ao renderizar a página.'
+          setPreviewErrors(current => ({ ...current, [index]: reason }))
+          canvas.dataset.error = 'true'
         }
       }
     }
-    void renderThumbnails()
-    return () => { cancelled = true }
+
+    void renderPreviews()
+    return () => {
+      cancelled = true
+      try { activeTask?.cancel() } catch { /* render already completed */ }
+    }
   }, [pdf, pageOrder, rotations])
 
   const cutCount = pageMode ? Math.max(0, pageOrder.length - 1) : cuts.length
@@ -119,10 +140,12 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
       </div>
       <div className="pdf-split-canvas">
         <p className="pdf-split-instruction">{pageMode ? 'Cada página será dividida em um arquivo independente' : 'Clique sobre uma tesoura para marcar ou remover uma divisão'}</p>
-        <div className="pdf-split-pages">
+        <div className="pdf-split-pages" ref={previewContainerRef}>
           {pageOrder.map((sourcePage, index) => <div className="pdf-split-item" key={sourcePage + '-' + index}>
             <button className="pdf-split-thumbnail" onClick={() => setMessage('Página ' + (index + 1) + ' do documento')} title={'Página ' + (index + 1)}>
-              {thumbnails[index] ? <img src={thumbnails[index]} alt={'Prévia da página ' + (index + 1)}/> : <span className="pdf-split-loading"><LoaderCircle size={20}/></span>}
+              <canvas data-pdf-page-index={index} aria-label={'Prévia da página ' + (index + 1)} /> 
+              {previewErrors[index] && <span className="pdf-split-preview-error" title={previewErrors[index]}>Falha na prévia</span>}
+              {!previewErrors[index] && <span className="pdf-split-loading"><LoaderCircle size={20}/></span>}
               <span className="pdf-split-page-number">{index + 1}</span>
               <ZoomIn className="pdf-split-zoom" size={16}/>
             </button>

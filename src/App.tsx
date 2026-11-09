@@ -365,7 +365,7 @@ export default function App() {
           <span className="brand-mark"><Zap size={22} fill="currentColor" /></span>
           <span><strong>NEXO<span> OPERACIONAL</span></strong><small>LEITURA INTELIGENTE DE APR</small></span>
         </a>
-        <div className="secure"><ShieldCheck size={15} /> PROCESSAMENTO LOCAL</div>
+        <div className="secure"><ShieldCheck size={15} /> OCR LOCAL • IA SOB SOLICITAÇÃO</div>
       </header>
 
       <section className="hero">
@@ -426,9 +426,9 @@ export default function App() {
       </section>
 
       <section className="info-strip" onClick={() => setExpanded(!expanded)} role="button" tabIndex={0} onKeyDown={event => { if (event.key === 'Enter') setExpanded(!expanded) }}>
-        <div><ShieldCheck size={19}/><span><strong>Seus dados ficam neste dispositivo</strong><small>As imagens não são enviadas para um servidor.</small></span></div>{expanded ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}
+        <div><ShieldCheck size={19}/><span><strong>Seus dados ficam neste dispositivo</strong><small>O OCR funciona no aparelho; a imagem só é enviada à IA se você solicitar.</small></span></div>{expanded ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}
       </section>
-      {expanded && <p className="privacy-detail">O reconhecimento de texto é feito no próprio navegador. O protocolo é salvo localmente neste aparelho. Para acessar os mesmos dados em outro dispositivo, será necessário exportar e importar uma planilha (sincronização em nuvem poderá ser adicionada em uma próxima etapa).</p>}
+      {expanded && <p className="privacy-detail">O OCR comum e o protocolo funcionam neste aparelho. Se você tocar em “TENTAR RECONHECER COM IA”, a imagem será enviada ao serviço de IA da Vercel/Google para análise. Use essa opção apenas com documentos que você esteja autorizado a compartilhar. O título retornado deve ser conferido antes de entrar no protocolo.</p>}
       <footer><span>PROTOCOLO FAST</span><span>CONTROLE INTELIGENTE DE APR • v1.0</span></footer>
     </main>
   )

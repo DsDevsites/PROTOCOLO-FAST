@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, FilePlus2, ImagePlus, Minus, MousePointer2, PenLine, Plus, RectangleHorizontal, RotateCw, Signature, Trash2, Type, Upload, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, FilePlus2, ImagePlus, MousePointer2, RectangleHorizontal, Signature, Trash2, Type, Upload, ZoomIn, ZoomOut } from 'lucide-react'
 import './PdfOrganizer.css'
 
 GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
@@ -28,6 +28,7 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLInputElement>(null)
   const [signaturePoints, setSignaturePoints] = useState<string>('')
+  const [stageSize, setStageSize] = useState({ width: 612, height: 792 })
   const drawing = useRef(false)
 
   useEffect(() => {
@@ -44,7 +45,8 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
       canvas.height = Math.ceil(viewport.height)
       canvas.style.width = viewport.width + 'px'
       canvas.style.height = viewport.height + 'px'
-      await current.render({ canvasContext: context, canvas, viewport }).promise
+      setStageSize({ width: viewport.width, height: viewport.height })
+      await current.render({ canvasContext: context, viewport }).promise
     }
     void render().catch(error => setMessage(error instanceof Error ? error.message : 'Falha ao renderizar página.'))
     return () => { cancelled = true }
@@ -131,8 +133,6 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
     if (!pdf) return
     setBusy(true); setMessage('Preparando PDF final…')
     try {
-      const source = await fetch(pdf.getPage(1).then ? '' : '').catch(() => null)
-      void source
       // Keep the original PDF bytes so all original pages and content are preserved.
       const original = await pdf.getData()
       const output = await PDFDocument.load(original)
@@ -196,7 +196,7 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
         <div className="tool-group"><label>Cor <input aria-label="Cor da ferramenta" type="color" value={color} onChange={e=>setColor(e.target.value)}/></label><label>Texto <select value={fontSize} onChange={e=>setFontSize(Number(e.target.value))}><option value="12">12</option><option value="16">16</option><option value="18">18</option><option value="24">24</option><option value="32">32</option></select></label><button disabled={!selected} title="Excluir elemento selecionado" onClick={removeSelected}><Trash2/></button></div>
       </div>
       <div className="pdf-instructions">{tool==='text'?'Toque na página para inserir um texto.':tool==='rect'?'Toque na página para adicionar um retângulo.':tool==='signature'?'Desenhe sua assinatura diretamente sobre a página.':tool==='image'?'Escolha uma imagem nos arquivos.':'Selecione e arraste os elementos adicionados.'}</div>
-      <div className="pdf-stage-scroll"><div className="pdf-stage" ref={stageRef} onClick={addMark} onPointerDown={startSignature} onPointerMove={moveSignature} onPointerUp={endSignature} onPointerCancel={endSignature} style={{width:canvasRef.current?.style.width||'auto',height:canvasRef.current?.style.height||'auto',cursor:tool==='text'||tool==='rect'?'crosshair':tool==='signature'?'crosshair':'default'}}>
+      <div className="pdf-stage-scroll"><div className="pdf-stage" ref={stageRef} onClick={addMark} onPointerDown={startSignature} onPointerMove={moveSignature} onPointerUp={endSignature} onPointerCancel={endSignature} style={{width:stageSize.width,height:stageSize.height,cursor:tool==='text'||tool==='rect'?'crosshair':tool==='signature'?'crosshair':'default'}}>
         <canvas ref={canvasRef}/>
         {marks.filter(mark=>mark.page===page).map(mark=>mark.kind==='signature'?<svg key={mark.id} className="pdf-signature" viewBox="0 0 100 100" preserveAspectRatio="none"><path d={mark.data} fill="none" stroke={mark.color} strokeWidth=".65" strokeLinecap="round" strokeLinejoin="round"/></svg>:<div key={mark.id} onPointerDown={e=>dragMark(e,mark)} onClick={e=>{e.stopPropagation();setSelected(mark.id)}} className={'pdf-mark '+(selected===mark.id?'selected':'')} style={{left:mark.x+'%',top:mark.y+'%',width:mark.w+'%',height:mark.h+'%',color:mark.color,borderColor:mark.color,background:mark.kind==='rect'?'transparent':'rgba(255,255,255,.88)',fontSize:mark.fontSize+'px'}}>{mark.kind==='text'?mark.text:mark.kind==='image'?<img src={mark.data} alt="Imagem adicionada"/>:null}</div>)}
         {signaturePoints&&<svg className="pdf-signature preview" viewBox="0 0 100 100" preserveAspectRatio="none"><path d={signaturePoints} fill="none" stroke={color} strokeWidth=".65" strokeLinecap="round"/></svg>}

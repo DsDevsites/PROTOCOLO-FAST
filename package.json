@@ -15,7 +15,8 @@
     "tesseract.js": "^7.0.0",
     "exceljs": "^4.4.0",
     "pdf-lib": "^1.17.1",
-    "react-easy-crop": "^5.4.2"
+    "react-easy-crop": "^5.4.2",
+    "pdfjs-dist": "^4.10.38"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",

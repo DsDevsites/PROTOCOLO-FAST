@@ -220,7 +220,7 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
   function duplicatePage() {
     const target = pageOrder[page - 1]; if (!target) return
     setPageOrder(current => [...current.slice(0, page), target, ...current.slice(page)])
-    setMarks(current => [...current, ...current.filter(mark => mark.page === page + 1).map(mark => ({ ...mark, id: uid(), page: page + 2 }))])
+    setMarks(current => [...current, ...current.filter(mark => mark.page === page).map(mark => ({ ...mark, id: uid(), page: page + 1 }))])
     setPage(page + 1); setMessage('Página duplicada.')
   }
   async function addBlankPage() {

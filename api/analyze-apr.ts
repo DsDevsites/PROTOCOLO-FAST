@@ -14,10 +14,10 @@ export default async function handler(req: any, res: any) {
     }
 
     const env = (globalThis as any).process?.env ?? {}
-    const apiKey = env.AI_GATEWAY_API_KEY
+    const apiKey = env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN
     if (!apiKey) {
       return res.status(503).json({
-        error: 'A IA ainda não está conectada. Falta cadastrar AI_GATEWAY_API_KEY nas variáveis de ambiente da Vercel.',
+        error: 'A IA ainda não está conectada. Falta habilitar a autenticação do Vercel AI Gateway ou cadastrar AI_GATEWAY_API_KEY nas variáveis de ambiente.',
       })
     }
 

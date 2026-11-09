@@ -206,19 +206,21 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
   }
   function movePage(direction: number) {
     const from = page - 1, to = from + direction; if (to < 0 || to >= pageOrder.length) return
-    setPageOrder(current => { const next = [...current]; [next[from], next[to]] = [next[to], next[from]]; return next }); setPage(to + 1)
+    setPageOrder(current => { const next = [...current]; [next[from], next[to]] = [next[to], next[from]]; return next }); setMarks(current => current.map(mark => mark.page === from + 1 ? { ...mark, page: to + 1 } : mark.page === to + 1 ? { ...mark, page: from + 1 } : mark)); setPage(to + 1)
   }
   function deletePages() {
     const targets = selectedPages.length ? selectedPages : [page]
     if (targets.length >= pageOrder.length) { setMessage('O PDF precisa manter pelo menos uma página.'); return }
     if (!window.confirm('Excluir ' + targets.length + ' página(s) do documento?')) return
     setPageOrder(current => current.filter((_, index) => !targets.includes(index + 1)))
+    setMarks(current => current.filter(mark => !targets.includes(mark.page)).map(mark => ({ ...mark, page: mark.page - targets.filter(n => n < mark.page).length })))
     setSelectedPages([]); setPage(current => Math.max(1, Math.min(current, pageOrder.length - targets.length)))
     setMessage('Páginas removidas. Exporte para gravar as alterações.')
   }
   function duplicatePage() {
     const target = pageOrder[page - 1]; if (!target) return
     setPageOrder(current => [...current.slice(0, page), target, ...current.slice(page)])
+    setMarks(current => [...current, ...current.filter(mark => mark.page === page + 1).map(mark => ({ ...mark, id: uid(), page: page + 2 }))])
     setPage(page + 1); setMessage('Página duplicada.')
   }
   async function addBlankPage() {

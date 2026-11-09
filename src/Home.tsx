@@ -21,8 +21,8 @@ export default function Home({ onSelect }: { onSelect: (module: 'protocol' | 'ca
       <button className="module-card module-scanner" onClick={() => onSelect('scanner')}>
         <span className="module-icon"><ScanLine size={28}/></span><span className="module-kicker">03 / DIGITALIZAÇÃO</span><strong>SCANNER DE DOCUMENTOS</strong><p>Digitalize páginas do caderno de revezamento, revise datas, organize documentos e gerencie PDFs.</p><span className="module-link">ABRIR SISTEMA <ArrowRight size={17}/></span>
       </button>
+      <button className="module-card module-pdf" onClick={() => onSelect('pdf')}><span className="module-icon"><FileText size={28}/></span><span className="module-kicker">04 / DOCUMENTOS</span><strong>ORGANIZADOR DE PDF</strong><p>Una, organize, anote, assine e adicione elementos aos seus documentos PDF.</p><span className="module-link">ABRIR SISTEMA <ArrowRight size={17}/></span></button>
     </section>
-    <button className="module-card module-pdf" onClick={() => onSelect('pdf')}><span className="module-icon"><FileText size={28}/></span><span className="module-kicker">04 / DOCUMENTOS</span><strong>ORGANIZADOR DE PDF</strong><p>Una, organize, anote, assine e adicione elementos aos seus documentos PDF.</p><span className="module-link">ABRIR SISTEMA <ArrowRight size={17}/></span></button>
     <footer><span>NEXO OPERACIONAL</span><span>QUATRO FERRAMENTAS • UM ÚNICO ENDEREÇO</span></footer>
   </main>
 }

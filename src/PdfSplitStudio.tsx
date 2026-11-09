@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { PDFDocument, degrees } from 'pdf-lib'
 import JSZip from 'jszip'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { ArrowLeft, Scissors, ZoomIn, Download, LoaderCircle, Pencil, Save, Eye, Trash2, Check, X, FolderDown } from 'lucide-react'
+import { ArrowLeft, Scissors, ZoomIn, LoaderCircle, Pencil, Save, Eye, Trash2, Check, X, FolderDown } from 'lucide-react'
 import './PdfSplitStudio.css'
 
 type Props = {

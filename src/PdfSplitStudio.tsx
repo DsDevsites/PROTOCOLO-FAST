@@ -173,7 +173,7 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
               <ZoomIn className="pdf-split-zoom" size={16}/>
             </button>
             <small>Página {index + 1}</small>
-            {index < pageOrder.length - 1 && <button className={'pdf-split-cut ' + (pageMode || cutSet.has(index + 1) ? 'selected' : '')} onClick={() => toggleCut(index + 1)} title="Alternar ponto de divisão" aria-label={'Dividir depois da página ' + (index + 1)} disabled={pageMode}>
+            {index < pageOrder.length - 1 && <button className={'pdf-split-cut ' + (pageMode || cutSet.has(index + 1) ? 'selected' : '')} onClick={() => toggleCut(index + 1)} title={pageMode ? 'Usar divisão personalizada a partir daqui' : 'Alternar ponto de divisão'} aria-label={'Dividir depois da página ' + (index + 1)} aria-pressed={pageMode || cutSet.has(index + 1)}>
               <span className="pdf-split-dotted"/>
               <span className="pdf-split-scissors"><Scissors size={17}/></span>
             </button>}

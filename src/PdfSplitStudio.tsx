@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { PDFDocument, degrees } from 'pdf-lib'
 import JSZip from 'jszip'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { ArrowLeft, Scissors, ZoomIn, Download, LoaderCircle } from 'lucide-react'
+import { ArrowLeft, Scissors, ZoomIn, LoaderCircle, Pencil, Save, Eye, Trash2, Check, X, FolderDown } from 'lucide-react'
 import './PdfSplitStudio.css'
 
 type Props = {
@@ -13,6 +13,32 @@ type Props = {
   onClose: () => void
 }
 
+type SplitPart = {
+  id: number
+  name: string
+  bytes: Uint8Array
+}
+
+function downloadBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 30000)
+}
+
+function cleanPdfName(value: string) {
+  const cleaned = value
+    .replace(/\.pdf$/i, '')
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
+    .trim()
+    .replace(/\.+$/g, '')
+  return (cleaned || 'documento') + '.pdf'
+}
+
 export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, onClose }: Props) {
   const previewContainerRef = useRef<HTMLDivElement>(null)
   const [previewErrors, setPreviewErrors] = useState<Record<number, string>>({})
@@ -20,9 +46,11 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
   const [cuts, setCuts] = useState<number[]>([])
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [parts, setParts] = useState<SplitPart[]>([])
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [draftName, setDraftName] = useState('')
+  const [savingAll, setSavingAll] = useState(false)
 
-  // Render directly into the canvases displayed by React. This avoids data-URL
-  // conversion and detached-canvas timing issues that caused broken previews.
   useEffect(() => {
     let cancelled = false
     let activeTask: ReturnType<Awaited<ReturnType<typeof pdf.getPage>>['render']> | null = null
@@ -67,9 +95,9 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
     }
   }, [pdf, pageOrder, rotations])
 
+  const cutSet = useMemo(() => new Set(cuts), [cuts])
   const cutCount = pageMode ? Math.max(0, pageOrder.length - 1) : cuts.length
   const outputCount = pageOrder.length ? cutCount + 1 : 0
-  const cutSet = useMemo(() => new Set(cuts), [cuts])
 
   function toggleCut(afterPageIndex: number) {
     setPageMode(false)
@@ -95,10 +123,7 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
         }
       })
       const baseName = fileName.replace(/\.pdf$/i, '') || 'documento'
-      const zip = new JSZip()
-      const outputFolder = zip.folder(baseName + '-partes')
-      if (!outputFolder) throw new Error('Não foi possível criar a pasta dos PDFs.')
-      const generatedParts: Array<{ name: string; bytes: Uint8Array }> = []
+      const generatedParts: SplitPart[] = []
 
       for (let index = 0; index < groups.length; index++) {
         const output = await PDFDocument.create()
@@ -110,38 +135,82 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
           output.addPage(page)
         })
         const bytes = await output.save()
-        const partName = baseName + '-parte-' + String(index + 1).padStart(2, '0') + '.pdf'
-        generatedParts.push({ name: partName, bytes })
-        outputFolder.file(partName, bytes)
+        generatedParts.push({
+          id: index + 1,
+          name: baseName + '-parte-' + String(index + 1).padStart(2, '0') + '.pdf',
+          bytes
+        })
       }
 
-      if (generatedParts.length === 1) {
-        const single = generatedParts[0]
-        const url = URL.createObjectURL(new Blob([single.bytes], { type: 'application/pdf' }))
-        const link = document.createElement('a')
-        link.href = url
-        link.download = single.name
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-        window.setTimeout(() => URL.revokeObjectURL(url), 10000)
-      } else {
-        setMessage('Compactando ' + generatedParts.length + ' PDFs em uma pasta…')
-        const archive = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } })
-        const url = URL.createObjectURL(archive)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = baseName + '-partes.zip'
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-        window.setTimeout(() => URL.revokeObjectURL(url), 10000)
-      }
-      setMessage(generatedParts.length > 1 ? 'Concluído! ' + generatedParts.length + ' PDFs organizados em ' + baseName + '-partes.zip.' : 'Divisão concluída: 1 PDF gerado.')
+      setParts(generatedParts)
+      setEditingId(null)
+      setMessage(generatedParts.length + ' PDF(s) gerado(s). Renomeie, abra, exclua ou guarde os arquivos abaixo.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Não foi possível dividir o PDF.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  function startRename(part: SplitPart) {
+    setEditingId(part.id)
+    setDraftName(part.name.replace(/\.pdf$/i, ''))
+  }
+
+  function confirmRename(partId: number) {
+    const nextName = cleanPdfName(draftName)
+    setParts(current => current.map(part => part.id === partId ? { ...part, name: nextName } : part))
+    setEditingId(null)
+    setDraftName('')
+    setMessage('Nome atualizado. Clique em Guardar para baixar com o novo nome.')
+  }
+
+  function savePart(part: SplitPart) {
+    downloadBlob(new Blob([part.bytes], { type: 'application/pdf' }), cleanPdfName(part.name))
+    setMessage('Arquivo "' + cleanPdfName(part.name) + '" enviado para download.')
+  }
+
+  function openPart(part: SplitPart) {
+    const url = URL.createObjectURL(new Blob([part.bytes], { type: 'application/pdf' }))
+    const opened = window.open(url, '_blank', 'noopener,noreferrer')
+    if (!opened) {
+      URL.revokeObjectURL(url)
+      setMessage('O navegador bloqueou a nova aba. Permita pop-ups para abrir a prévia.')
+      return
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000)
+  }
+
+  function deletePart(partId: number) {
+    setParts(current => current.filter(part => part.id !== partId))
+    if (editingId === partId) setEditingId(null)
+    setMessage('PDF removido da lista. Essa ação não altera o documento original.')
+  }
+
+  async function saveAll() {
+    if (!parts.length || savingAll) return
+    setSavingAll(true)
+    try {
+      if (parts.length === 1) {
+        savePart(parts[0])
+        return
+      }
+      const zip = new JSZip()
+      const folderName = cleanPdfName(fileName).replace(/\.pdf$/i, '') + '-partes'
+      const folder = zip.folder(folderName)
+      if (!folder) throw new Error('Não foi possível criar a pasta dos PDFs.')
+      parts.forEach(part => folder.file(cleanPdfName(part.name), part.bytes))
+      const archive = await zip.generateAsync({
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      })
+      downloadBlob(archive, folderName + '.zip')
+      setMessage(parts.length + ' PDFs guardados em uma pasta ZIP, com os nomes atualizados.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Não foi possível guardar os PDFs.')
+    } finally {
+      setSavingAll(false)
     }
   }
 
@@ -151,7 +220,7 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
         <button className="pdf-split-back" onClick={onClose}><ArrowLeft size={17}/> Voltar ao editor</button>
         <div className="pdf-split-heading"><strong>DIVIDIR PDF</strong><span>{fileName} • {pageOrder.length} páginas</span></div>
         <button className="pdf-split-primary" disabled={busy || pageOrder.length === 0} onClick={() => void split()}>
-          {busy ? <LoaderCircle className="pdf-split-spin" size={17}/> : <Download size={17}/>}
+          {busy ? <LoaderCircle className="pdf-split-spin" size={17}/> : <Scissors size={17}/>}
           {busy ? 'Processando…' : <>Dividir <b>{outputCount} PDFs</b></>}
         </button>
       </header>
@@ -166,7 +235,7 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
         <div className="pdf-split-pages" ref={previewContainerRef}>
           {pageOrder.map((sourcePage, index) => <div className="pdf-split-item" key={sourcePage + '-' + index}>
             <button className="pdf-split-thumbnail" onClick={() => setMessage('Página ' + (index + 1) + ' do documento')} title={'Página ' + (index + 1)}>
-              <canvas data-pdf-page-index={index} aria-label={'Prévia da página ' + (index + 1)} /> 
+              <canvas data-pdf-page-index={index} aria-label={'Prévia da página ' + (index + 1)} />
               {previewErrors[index] && <span className="pdf-split-preview-error" title={previewErrors[index]}>Falha na prévia</span>}
               {!previewErrors[index] && <span className="pdf-split-loading"><LoaderCircle size={20}/></span>}
               <span className="pdf-split-page-number">{index + 1}</span>
@@ -180,6 +249,40 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
           </div>)}
         </div>
       </div>
+
+      {parts.length > 0 && <section className="pdf-split-results" aria-label="PDFs gerados">
+        <div className="pdf-split-results-heading">
+          <div><strong>PDFs separados</strong><span>{parts.length} arquivo(s) pronto(s)</span></div>
+          <button className="pdf-split-save-all" onClick={() => void saveAll()} disabled={savingAll}>
+            {savingAll ? <LoaderCircle className="pdf-split-spin" size={16}/> : <FolderDown size={16}/>}
+            {savingAll ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+        <div className="pdf-split-file-list">
+          {parts.map(part => <div className="pdf-split-file-row" key={part.id}>
+            <div className="pdf-split-file-name">
+              <span className="pdf-split-pdf-icon">PDF</span>
+              {editingId === part.id
+                ? <input autoFocus value={draftName} onChange={event => setDraftName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') confirmRename(part.id); if (event.key === 'Escape') setEditingId(null) }} aria-label="Novo nome do PDF"/>
+                : <span title={part.name}>{part.name}</span>}
+            </div>
+            <div className="pdf-split-file-actions">
+              {editingId === part.id
+                ? <>
+                    <button onClick={() => confirmRename(part.id)} title="Confirmar nome" aria-label="Confirmar nome"><Check size={17}/></button>
+                    <button onClick={() => setEditingId(null)} title="Cancelar renomeação" aria-label="Cancelar renomeação"><X size={17}/></button>
+                  </>
+                : <>
+                    <button onClick={() => startRename(part)} title="Renomear PDF" aria-label="Renomear PDF"><Pencil size={16}/></button>
+                    <button onClick={() => savePart(part)} title="Guardar PDF" aria-label="Guardar PDF"><Save size={17}/></button>
+                    <button onClick={() => openPart(part)} title="Abrir PDF" aria-label="Abrir PDF"><Eye size={17}/></button>
+                    <button className="pdf-split-delete" onClick={() => deletePart(part.id)} title="Excluir PDF" aria-label="Excluir PDF"><Trash2 size={17}/></button>
+                  </>}
+            </div>
+          </div>)}
+        </div>
+      </section>}
+
       <footer className="pdf-split-footer">
         <span>{outputCount} arquivo(s) serão gerados</span>
         {message && <span className="pdf-split-message">{message}</span>}

@@ -32,6 +32,8 @@ export default function App() {
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
+  const [lastImage, setLastImage] = useState<Blob | null>(null)
+  const [aiBusy, setAiBusy] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
   const [portraitFeed, setPortraitFeed] = useState(false)
   const [cameraError, setCameraError] = useState('')
@@ -89,6 +91,7 @@ export default function App() {
       const worker = await getWorker()
       setStatus('Preparando imagem e procurando o nome digitado da APR…')
       const imageBlob = source instanceof Blob ? source : await (await fetch(source)).blob()
+      setLastImage(imageBlob)
       const bitmap = await createImageBitmap(imageBlob)
       const scale = Math.min(3, 2600 / bitmap.width)
       const base = document.createElement('canvas')
@@ -173,6 +176,40 @@ export default function App() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não foi possível reconhecer o texto. Tente novamente.')
     } finally { setBusy(false); setProgress(0) }
+  }
+
+
+  async function recognizeWithAI() {
+    if (!lastImage || aiBusy) return
+    setAiBusy(true); setError(''); setStatus('A IA está analisando o título digitado da APR…')
+    try {
+      const bitmap = await createImageBitmap(lastImage)
+      const scale = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('Não foi possível preparar a imagem para a IA.')
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      bitmap.close()
+      const imageData = canvas.toDataURL('image/jpeg', 0.82)
+      const response = await fetch('/api/analyze-apr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageData }),
+      })
+      const result = await response.json() as { title?: string; confidence?: number; error?: string }
+      if (!response.ok) throw new Error(result.error || 'A análise por IA não foi concluída.')
+      const title = (result.title || '').trim().replace(/\\s+/g, ' ')
+      if (title.length < 5) throw new Error('A IA não encontrou um título confiável. Tente uma foto mais próxima do campo TAREFA.')
+      setTitleDraft(title)
+      setRecognizedText(title)
+      setError('')
+      const confidence = typeof result.confidence === 'number' ? Math.round(result.confidence * 100) : null
+      setStatus(confidence === null ? 'Título sugerido pela IA. Confira antes de adicionar.' : `Título sugerido pela IA • confiança estimada: ${confidence}%. Confira antes de adicionar.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao analisar a APR com IA.')
+    } finally { setAiBusy(false) }
   }
 
   async function openCamera() {
@@ -370,6 +407,8 @@ export default function App() {
           <button className="action-button full" onClick={addTitle}><Plus size={18}/> ADICIONAR AO PROTOCOLO</button>
         </div>}
         {error && <div className="notice error"><AlertCircle size={17}/><span>{error}</span><button onClick={() => setError('')}><X size={15}/></button></div>}
+        {error && lastImage && <button className="action-button full ai-retry-button" onClick={() => void recognizeWithAI()} disabled={aiBusy || busy}><Zap size={17}/>{aiBusy ? 'IA ANALISANDO APR…' : 'TENTAR RECONHECER COM IA'}</button>}
+        {aiBusy && <div className="processing"><LoaderCircle className="spin" size={20}/><div><strong>Analisando a imagem com IA multimodal…</strong><small>A IA procura o título digitado e ignora nomes, datas e outros campos.</small></div></div>}
         {status && !busy && !recognizedText && <div className="notice success"><CheckCircle2 size={17}/>{status}</div>}
       </section>
 

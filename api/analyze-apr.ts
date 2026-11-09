@@ -28,7 +28,7 @@ export default async function handler(req: any, res: any) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash',
+        model: 'google/gemini-3.1-flash-lite',
         temperature: 0.1,
         max_tokens: 350,
         messages: [

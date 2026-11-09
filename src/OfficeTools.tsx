@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ArrowLeft, FileText, FileSpreadsheet, Presentation, ImagePlus, FileImage, Download, Upload, Printer, LoaderCircle } from 'lucide-react'
+import { ArrowLeft, FileText, FileSpreadsheet, Presentation, FileImage, Download, Upload, Printer, LoaderCircle } from 'lucide-react'
 import { PDFDocument } from 'pdf-lib'
 import { getDocument } from 'pdfjs-dist'
 import './OfficeTools.css'

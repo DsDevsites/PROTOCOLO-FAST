@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, FilePlus2, ImagePlus, MousePointer2, RectangleHorizontal, Signature, Trash2, Type, Upload, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, FilePlus2, ImagePlus, MousePointer2, RectangleHorizontal, Signature, Trash2, Type, Upload, ZoomIn, ZoomOut, RotateCcw, RotateCw, Files, Scissors, Copy, Plus, ArrowUp, ArrowDown, X } from 'lucide-react'
 import './PdfOrganizer.css'
 
 GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
@@ -15,6 +15,10 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
   const [fileName, setFileName] = useState('')
   const [page, setPage] = useState(1)
   const [pageCount, setPageCount] = useState(0)
+  const [pageOrder, setPageOrder] = useState<number[]>([])
+  const [selectedPages, setSelectedPages] = useState<number[]>([])
+  const [rotations, setRotations] = useState<Record<number, number>>({})
+  const mergeRef = useRef<HTMLInputElement>(null)
   const [zoom, setZoom] = useState(1)
   const [tool, setTool] = useState<Tool>('select')
   const [marks, setMarks] = useState<Mark[]>([])
@@ -35,9 +39,10 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
     let cancelled = false
     async function render() {
       if (!pdf || !canvasRef.current) return
-      const current = await pdf.getPage(page)
+      const sourcePage = pageOrder[page - 1] ?? page
+      const current = await pdf.getPage(sourcePage)
       if (cancelled || !canvasRef.current) return
-      const viewport = current.getViewport({ scale: zoom })
+      const viewport = current.getViewport({ scale: zoom, rotation: (current.rotate + (rotations[sourcePage] || 0)) % 360 })
       const canvas = canvasRef.current
       const context = canvas.getContext('2d')
       if (!context) return
@@ -50,7 +55,7 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
     }
     void render().catch(error => setMessage(error instanceof Error ? error.message : 'Falha ao renderizar página.'))
     return () => { cancelled = true }
-  }, [pdf, page, zoom])
+  }, [pdf, page, pageOrder, rotations, zoom])
 
   async function openFile(file?: File) {
     if (!file) return
@@ -59,7 +64,7 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
     try {
       const bytes = await file.arrayBuffer()
       const loaded = await getDocument({ data: new Uint8Array(bytes) }).promise
-      setPdf(loaded); setPageCount(loaded.numPages); setPage(1); setMarks([]); setSelected(null); setFileName(file.name)
+      setPdf(loaded); setPageCount(loaded.numPages); setPageOrder(Array.from({ length: loaded.numPages }, (_, i) => i + 1)); setSelectedPages([]); setRotations({}); setPage(1); setMarks([]); setSelected(null); setFileName(file.name)
       setMessage('PDF carregado. Escolha uma ferramenta para começar.')
     } catch { setMessage('Não foi possível abrir este PDF. Verifique se o arquivo não está protegido por senha ou danificado.') }
     finally { setBusy(false) }
@@ -135,7 +140,10 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
     try {
       // Keep the original PDF bytes so all original pages and content are preserved.
       const original = await pdf.getData()
-      const output = await PDFDocument.load(original)
+      const source = await PDFDocument.load(original)
+      const output = await PDFDocument.create()
+      const copiedPages = await output.copyPages(source, pageOrder.map(index => index - 1))
+      copiedPages.forEach((copied, index) => { const sourceIndex = pageOrder[index]; copied.setRotation(degrees((copied.getRotation().angle + (rotations[sourceIndex] || 0)) % 360)); output.addPage(copied) })
       const font = await output.embedFont(StandardFonts.Helvetica)
       const pages = output.getPages()
       for (const mark of marks) {
@@ -176,6 +184,99 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
     })
   }
   function removeSelected() { if (selected) { setMarks(old => old.filter(mark => mark.id !== selected)); setSelected(null) } }
+  async function reloadDocument(bytes: Uint8Array, name = fileName) {
+    const loaded = await getDocument({ data: new Uint8Array(bytes) }).promise
+    setPdf(loaded); setPageCount(loaded.numPages); setPageOrder(Array.from({ length: loaded.numPages }, (_, i) => i + 1))
+    setPage(1); setSelectedPages([]); setRotations({}); setMarks([]); setSelected(null); setFileName(name)
+  }
+  function togglePageSelection(n: number) { setSelectedPages(current => current.includes(n) ? current.filter(v => v !== n) : [...current, n].sort((a,b)=>a-b)) }
+  function rotateCurrent(direction: number) {
+    const sourcePage = pageOrder[page - 1]; if (!sourcePage) return
+    setRotations(current => ({ ...current, [sourcePage]: ((current[sourcePage] || 0) + direction + 360) % 360 }))
+    setMessage('Rotação aplicada. Ela será gravada no PDF ao exportar.')
+  }
+  function rotateSelected(direction: number) {
+    const targets = selectedPages.length ? selectedPages : [page]
+    setRotations(current => { const next = { ...current }; targets.forEach(n => { const id = pageOrder[n - 1]; if (id) next[id] = ((next[id] || 0) + direction + 360) % 360 }); return next })
+    setMessage('Rotação aplicada às páginas selecionadas.')
+  }
+  function movePage(direction: number) {
+    const from = page - 1, to = from + direction; if (to < 0 || to >= pageOrder.length) return
+    setPageOrder(current => { const next = [...current]; [next[from], next[to]] = [next[to], next[from]]; return next }); setPage(to + 1)
+  }
+  function deletePages() {
+    const targets = selectedPages.length ? selectedPages : [page]
+    if (targets.length >= pageOrder.length) { setMessage('O PDF precisa manter pelo menos uma página.'); return }
+    if (!window.confirm('Excluir ' + targets.length + ' página(s) do documento?')) return
+    setPageOrder(current => current.filter((_, index) => !targets.includes(index + 1)))
+    setSelectedPages([]); setPage(current => Math.max(1, Math.min(current, pageOrder.length - targets.length)))
+    setMessage('Páginas removidas. Exporte para gravar as alterações.')
+  }
+  function duplicatePage() {
+    const target = pageOrder[page - 1]; if (!target) return
+    setPageOrder(current => [...current.slice(0, page), target, ...current.slice(page)])
+    setPage(page + 1); setMessage('Página duplicada.')
+  }
+  async function addBlankPage() {
+    if (!pdf) return
+    setBusy(true)
+    try {
+      const doc = await PDFDocument.load(await pdf.getData())
+      const current = doc.getPages()[pageOrder[page - 1] - 1]
+      const size = current?.getSize() || { width: 595.28, height: 841.89 }
+      doc.insertPage(pageOrder[page - 1] || 0, [size.width, size.height])
+      await reloadDocument(await doc.save(), fileName); setMessage('Página em branco adicionada.')
+    } catch (e) { setMessage(e instanceof Error ? e.message : 'Não foi possível adicionar a página.') }
+    finally { setBusy(false) }
+  }
+  async function mergeFiles(files?: FileList | null) {
+    if (!pdf || !files?.length) return
+    setBusy(true); setMessage('Mesclando documentos…')
+    try {
+      const doc = await PDFDocument.load(await pdf.getData())
+      for (const file of Array.from(files)) {
+        if (file.type !== 'application/pdf') continue
+        const other = await PDFDocument.load(await file.arrayBuffer())
+        const copied = await doc.copyPages(other, other.getPageIndices()); copied.forEach(item => doc.addPage(item))
+      }
+      await reloadDocument(await doc.save(), fileName.replace(/\.pdf$/i, '') + '-mesclado.pdf')
+      setMessage('PDFs mesclados com sucesso.')
+    } catch (e) { setMessage(e instanceof Error ? e.message : 'Falha ao mesclar os PDFs.') }
+    finally { setBusy(false); if (mergeRef.current) mergeRef.current.value = '' }
+  }
+  async function extractSelected() {
+    if (!pdf) return
+    const targets = selectedPages.length ? selectedPages : [page]; setBusy(true)
+    try {
+      const source = await PDFDocument.load(await pdf.getData()), output = await PDFDocument.create()
+      const copied = await output.copyPages(source, targets.map(n => pageOrder[n - 1] - 1))
+      copied.forEach((item, index) => { const id = pageOrder[targets[index] - 1]; item.setRotation(degrees((item.getRotation().angle + (rotations[id] || 0)) % 360)); output.addPage(item) })
+      const bytes = await output.save(), url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
+      const link = document.createElement('a'); link.href = url; link.download = 'paginas-extraidas.pdf'; link.click(); URL.revokeObjectURL(url)
+      setMessage('Páginas extraídas em um novo PDF.')
+    } catch (e) { setMessage(e instanceof Error ? e.message : 'Não foi possível extrair as páginas.') }
+    finally { setBusy(false) }
+  }
+  async function splitPdf() {
+    if (!pdf) return
+    const raw = window.prompt('Informe intervalos separados por vírgula. Exemplo: 1-3, 4-6, 7'); if (!raw) return
+    let groups: number[][]
+    try { groups = raw.split(',').map(part => { const bits = part.trim().split('-'), start = Number(bits[0]), end = Number(bits[1] || bits[0]); if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > pageOrder.length) throw new Error('Intervalo inválido: ' + part); return Array.from({length:end-start+1}, (_,i)=>start+i) }) }
+    catch (e) { setMessage(e instanceof Error ? e.message : 'Intervalos inválidos.'); return }
+    setBusy(true)
+    try {
+      const source = await PDFDocument.load(await pdf.getData())
+      for (let i=0;i<groups.length;i++) {
+        const output = await PDFDocument.create(), copied = await output.copyPages(source, groups[i].map(n=>pageOrder[n-1]-1))
+        copied.forEach((item,index)=>{ const id=pageOrder[groups[i][index]-1]; item.setRotation(degrees((item.getRotation().angle+(rotations[id]||0))%360)); output.addPage(item) })
+        const bytes=await output.save(), url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}))
+        const link=document.createElement('a'); link.href=url; link.download='documento-parte-'+(i+1)+'.pdf'; link.click(); URL.revokeObjectURL(url)
+      }
+      setMessage('Divisão concluída. Cada intervalo foi baixado como um PDF separado.')
+    } catch (e) { setMessage(e instanceof Error ? e.message : 'Não foi possível dividir o PDF.') }
+    finally { setBusy(false) }
+  }
+
 
   return <main className="app-shell pdf-shell">
     <header className="topbar"><button className="back-button" onClick={onBack}><ArrowLeft size={15}/> VOLTAR AO NEXO</button><a className="brand" href="#"><span className="brand-mark">N</span><span><strong>NEXO<span> OPERACIONAL</span></strong><small>ORGANIZADOR E EDITOR DE PDF</small></span></a><span className="secure">PROCESSAMENTO LOCAL</span></header>
@@ -195,13 +296,26 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
         <div className="tool-group"><button title="Diminuir zoom" onClick={()=>setZoom(z=>Math.max(.45,z-.15))}><ZoomOut/></button><span>{Math.round(zoom*100)}%</span><button title="Aumentar zoom" onClick={()=>setZoom(z=>Math.min(2.2,z+.15))}><ZoomIn/></button></div>
         <div className="tool-group"><label>Cor <input aria-label="Cor da ferramenta" type="color" value={color} onChange={e=>setColor(e.target.value)}/></label><label>Texto <select value={fontSize} onChange={e=>setFontSize(Number(e.target.value))}><option value="12">12</option><option value="16">16</option><option value="18">18</option><option value="24">24</option><option value="32">32</option></select></label><button disabled={!selected} title="Excluir elemento selecionado" onClick={removeSelected}><Trash2/></button></div>
       </div>
+
+      <div className="pdf-page-tools">
+        <div className="pdf-page-tools-title"><strong>ORGANIZAR PDF</strong><small>Operações aplicadas ao documento exportado</small></div>
+        <div className="pdf-page-actions">
+          <button onClick={()=>rotateCurrent(-90)}><RotateCcw/> Girar -90°</button><button onClick={()=>rotateCurrent(90)}><RotateCw/> Girar +90°</button><button onClick={()=>rotateSelected(180)}>Girar 180°</button>
+          <button onClick={()=>movePage(-1)} disabled={page<=1}><ArrowUp/> Subir</button><button onClick={()=>movePage(1)} disabled={page>=pageOrder.length}><ArrowDown/> Descer</button>
+          <button onClick={duplicatePage}><Copy/> Duplicar</button><button onClick={()=>void addBlankPage()}><Plus/> Página em branco</button><button onClick={deletePages}><Trash2/> Excluir</button>
+          <button onClick={()=>void extractSelected()}><Download/> Extrair páginas</button><button onClick={()=>void splitPdf()}><Scissors/> Dividir PDF</button><button onClick={()=>mergeRef.current?.click()}><Files/> Mesclar PDFs</button>
+          <input ref={mergeRef} hidden type="file" accept="application/pdf" multiple onChange={e=>void mergeFiles(e.target.files)}/>
+        </div>
+        <div className="pdf-page-select"><span>{selectedPages.length ? selectedPages.length+' página(s) selecionada(s)' : 'Página atual selecionada para operações'}</span><button onClick={()=>setSelectedPages(pageOrder.map((_,i)=>i+1))}>Selecionar todas</button><button onClick={()=>setSelectedPages([])}>Limpar seleção</button></div>
+        <div className="pdf-page-strip">{pageOrder.map((sourcePage,index)=><button key={index} className={'pdf-page-chip '+(page===index+1?'current ':'')+(selectedPages.includes(index+1)?'checked':'')} onClick={()=>setPage(index+1)} title="Clique para abrir; use o botão + para selecionar"><span className="pdf-page-number">{index+1}</span><small>Página {index+1}</small>{rotations[sourcePage]?<em>{rotations[sourcePage]}°</em>:null}<span className="pdf-page-check" onClick={e=>{e.stopPropagation();togglePageSelection(index+1)}}>{selectedPages.includes(index+1)?'✓':'+'}</span></button>)}</div>
+      </div>
       <div className="pdf-instructions">{tool==='text'?'Toque na página para inserir um texto.':tool==='rect'?'Toque na página para adicionar um retângulo.':tool==='signature'?'Desenhe sua assinatura diretamente sobre a página.':tool==='image'?'Escolha uma imagem nos arquivos.':'Selecione e arraste os elementos adicionados.'}</div>
       <div className="pdf-stage-scroll"><div className="pdf-stage" ref={stageRef} onClick={addMark} onPointerDown={startSignature} onPointerMove={moveSignature} onPointerUp={endSignature} onPointerCancel={endSignature} style={{width:stageSize.width,height:stageSize.height,cursor:tool==='text'||tool==='rect'?'crosshair':tool==='signature'?'crosshair':'default'}}>
         <canvas ref={canvasRef}/>
         {marks.filter(mark=>mark.page===page).map(mark=>mark.kind==='signature'?<svg key={mark.id} className="pdf-signature" viewBox="0 0 100 100" preserveAspectRatio="none"><path d={mark.data} fill="none" stroke={mark.color} strokeWidth=".65" strokeLinecap="round" strokeLinejoin="round"/></svg>:<div key={mark.id} onPointerDown={e=>dragMark(e,mark)} onClick={e=>{e.stopPropagation();setSelected(mark.id)}} className={'pdf-mark '+(selected===mark.id?'selected':'')} style={{left:mark.x+'%',top:mark.y+'%',width:mark.w+'%',height:mark.h+'%',color:mark.color,borderColor:mark.color,background:mark.kind==='rect'?'transparent':'rgba(255,255,255,.88)',fontSize:mark.fontSize+'px'}}>{mark.kind==='text'?mark.text:mark.kind==='image'?<img src={mark.data} alt="Imagem adicionada"/>:null}</div>)}
         {signaturePoints&&<svg className="pdf-signature preview" viewBox="0 0 100 100" preserveAspectRatio="none"><path d={signaturePoints} fill="none" stroke={color} strokeWidth=".65" strokeLinecap="round"/></svg>}
       </div></div>
-      <div className="pdf-pager"><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}><ChevronLeft/> ANTERIOR</button><span>PÁGINA <strong>{page}</strong> DE {pageCount}</span><button disabled={page>=pageCount} onClick={()=>setPage(p=>p+1)}>PRÓXIMA <ChevronRight/></button></div>
+      <div className="pdf-pager"><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}><ChevronLeft/> ANTERIOR</button><span>PÁGINA <strong>{page}</strong> DE {pageOrder.length}</span><button disabled={page>=pageOrder.length} onClick={()=>setPage(p=>p+1)}>PRÓXIMA <ChevronRight/></button></div>
       <div className="pdf-note">As anotações são adicionadas como uma nova camada. O conteúdo original do PDF é preservado; textos já gravados na página não são diretamente reescritos nesta versão.</div>
     </section>}
     {message&&<div className="notice success">{message}</div>}

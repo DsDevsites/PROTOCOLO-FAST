@@ -33,7 +33,10 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
           const context = canvas.getContext('2d')
           if (!context) continue
           await page.render({ canvasContext: context, viewport }).promise
-          if (!cancelled) setThumbnails(current => ({ ...current, [index]: canvas.toDataURL('image/jpeg', 0.82) }))
+          // Capture the image before releasing the canvas. React may execute a
+          // functional state updater after this loop has already cleared it.
+          const previewDataUrl = canvas.toDataURL('image/jpeg', 0.86)
+          if (!cancelled) setThumbnails(current => ({ ...current, [index]: previewDataUrl }))
           canvas.width = 0
           canvas.height = 0
         } catch {
@@ -127,7 +130,7 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
               <ZoomIn className="pdf-split-zoom" size={16}/>
             </button>
             <small>Página {index + 1}</small>
-            {index < pageOrder.length - 1 && <button className={'pdf-split-cut ' + (pageMode || cutSet.has(index + 1) ? 'selected' : '')} onClick={() => toggleCut(index + 1)} title="Alternar ponto de divisão" aria-label={'Dividir depois da página ' + (index + 1)} disabled={pageMode}>
+            {index < pageOrder.length - 1 && <button className={'pdf-split-cut ' + (pageMode || cutSet.has(index + 1) ? 'selected' : '')} onClick={() => toggleCut(index + 1)} title={pageMode ? 'Usar divisão personalizada a partir daqui' : 'Alternar ponto de divisão'} aria-label={'Dividir depois da página ' + (index + 1)} aria-pressed={pageMode || cutSet.has(index + 1)}>
               <span className="pdf-split-dotted"/>
               <span className="pdf-split-scissors"><Scissors size={17}/></span>
             </button>}

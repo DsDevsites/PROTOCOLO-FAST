@@ -287,3 +287,6 @@
  .scanner-library-actions>div{display:grid;grid-template-columns:1fr}
  .scanner-library-actions>div button{width:100%;min-height:46px}
 }
+
+.ai-retry-button{margin-top:10px;background:linear-gradient(100deg,#ff7629,#ff9a45);box-shadow:0 8px 24px rgba(255,118,41,.16)}
+.processing small{display:block;color:#aaa;font-size:10px;margin-top:5px;line-height:1.5}

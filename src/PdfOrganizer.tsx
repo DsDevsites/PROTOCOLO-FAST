@@ -5,6 +5,7 @@ import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { ArrowLeft, ChevronLeft, ChevronRight, Download, FilePlus2, ImagePlus, MousePointer2, RectangleHorizontal, Signature, Trash2, Type, Upload, ZoomIn, ZoomOut, RotateCcw, RotateCw, Files, Scissors, Copy, Plus, ArrowUp, ArrowDown } from 'lucide-react'
 import './PdfOrganizer.css'
+import PdfSplitStudio from './PdfSplitStudio'
 
 GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
 type Mark = { id: string; page: number; kind: 'text' | 'rect' | 'image' | 'signature'; x: number; y: number; w: number; h: number; text?: string; data?: string; color?: string; fontSize?: number }
@@ -13,6 +14,7 @@ const uid = () => globalThis.crypto?.randomUUID?.() ?? String(Date.now() + Math.
 
 export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
+  const [splitOpen, setSplitOpen] = useState(false)
   const [fileName, setFileName] = useState('')
   const [page, setPage] = useState(1)
   const [pageCount, setPageCount] = useState(0)
@@ -322,26 +324,10 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
     } catch (e) { setMessage(e instanceof Error ? e.message : 'Não foi possível extrair as páginas.') }
     finally { setBusy(false) }
   }
-  async function splitPdf() {
+  function splitPdf() {
     if (!pdf) return
-    const raw = window.prompt('Informe intervalos separados por vírgula. Exemplo: 1-3, 4-6, 7'); if (!raw) return
-    let groups: number[][]
-    try { groups = raw.split(',').map(part => { const bits = part.trim().split('-'), start = Number(bits[0]), end = Number(bits[1] || bits[0]); if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > pageOrder.length) throw new Error('Intervalo inválido: ' + part); return Array.from({length:end-start+1}, (_,i)=>start+i) }) }
-    catch (e) { setMessage(e instanceof Error ? e.message : 'Intervalos inválidos.'); return }
-    setBusy(true)
-    try {
-      const source = await PDFDocument.load(await pdf.getData())
-      for (let i=0;i<groups.length;i++) {
-        const output = await PDFDocument.create(), copied = await output.copyPages(source, groups[i].map(n=>pageOrder[n-1]-1))
-        copied.forEach((item,index)=>{ const id=pageOrder[groups[i][index]-1]; item.setRotation(degrees((item.getRotation().angle+(rotations[id]||0))%360)); output.addPage(item) })
-        const bytes=await output.save(), url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}))
-        const link=document.createElement('a'); link.href=url; link.download='documento-parte-'+(i+1)+'.pdf'; link.click(); URL.revokeObjectURL(url)
-      }
-      setMessage('Divisão concluída. Cada intervalo foi baixado como um PDF separado.')
-    } catch (e) { setMessage(e instanceof Error ? e.message : 'Não foi possível dividir o PDF.') }
-    finally { setBusy(false) }
+    setSplitOpen(true)
   }
-
 
   return <main className="app-shell pdf-shell">
     <header className="topbar"><button className="back-button" onClick={onBack}><ArrowLeft size={15}/> VOLTAR AO NEXO</button><a className="brand" href="#"><span className="brand-mark">N</span><span><strong>NEXO<span> OPERACIONAL</span></strong><small>ORGANIZADOR E EDITOR DE PDF</small></span></a><span className="secure">PROCESSAMENTO LOCAL</span></header>
@@ -394,6 +380,7 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
       <div className="pdf-pager"><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}><ChevronLeft/> ANTERIOR</button><span>PÁGINA <strong>{page}</strong> DE {pageOrder.length}</span><button disabled={page>=pageOrder.length} onClick={()=>setPage(p=>p+1)}>PRÓXIMA <ChevronRight/></button></div>
       <div className="pdf-note">As anotações são adicionadas como uma nova camada. O conteúdo original do PDF é preservado; textos já gravados na página não são diretamente reescritos nesta versão.</div>
     </section>}
+    {splitOpen && pdf && <PdfSplitStudio pdf={pdf} pageOrder={pageOrder} rotations={rotations} fileName={fileName} onClose={() => setSplitOpen(false)} />}
     {message&&<div className="notice success">{message}</div>}
     {busy&&<div className="processing">Processando documento…</div>}
     <footer><span>NEXO OPERACIONAL</span><span>ORGANIZADOR DE PDF • FERRAMENTA INDEPENDENTE</span></footer>

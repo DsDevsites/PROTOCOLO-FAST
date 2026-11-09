@@ -195,6 +195,10 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
     setRotations(current => ({ ...current, [sourcePage]: ((current[sourcePage] || 0) + direction + 360) % 360 }))
     setMessage('Rotação aplicada. Ela será gravada no PDF ao exportar.')
   }
+  function rotateAll(direction: number) {
+    setRotations(current => { const next = { ...current }; pageOrder.forEach(id => { next[id] = ((next[id] || 0) + direction + 360) % 360 }); return next })
+    setMessage('Rotação aplicada a todas as páginas.')
+  }
   function rotateSelected(direction: number) {
     const targets = selectedPages.length ? selectedPages : [page]
     setRotations(current => { const next = { ...current }; targets.forEach(n => { const id = pageOrder[n - 1]; if (id) next[id] = ((next[id] || 0) + direction + 360) % 360 }); return next })
@@ -300,7 +304,7 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
       <div className="pdf-page-tools">
         <div className="pdf-page-tools-title"><strong>ORGANIZAR PDF</strong><small>Operações aplicadas ao documento exportado</small></div>
         <div className="pdf-page-actions">
-          <button onClick={()=>rotateCurrent(-90)}><RotateCcw/> Girar -90°</button><button onClick={()=>rotateCurrent(90)}><RotateCw/> Girar +90°</button><button onClick={()=>rotateSelected(180)}>Girar 180°</button>
+          <button onClick={()=>rotateCurrent(-90)}><RotateCcw/> Girar -90°</button><button onClick={()=>rotateCurrent(90)}><RotateCw/> Girar +90°</button><button onClick={()=>rotateSelected(180)}>Girar 180°</button><button onClick={()=>rotateAll(90)}>Girar todas 90°</button>
           <button onClick={()=>movePage(-1)} disabled={page<=1}><ArrowUp/> Subir</button><button onClick={()=>movePage(1)} disabled={page>=pageOrder.length}><ArrowDown/> Descer</button>
           <button onClick={duplicatePage}><Copy/> Duplicar</button><button onClick={()=>void addBlankPage()}><Plus/> Página em branco</button><button onClick={deletePages}><Trash2/> Excluir</button>
           <button onClick={()=>void extractSelected()}><Download/> Extrair páginas</button><button onClick={()=>void splitPdf()}><Scissors/> Dividir PDF</button><button onClick={()=>mergeRef.current?.click()}><Files/> Mesclar PDFs</button>

@@ -50,11 +50,16 @@ export default function OfficeTools({ onBack }: { onBack: () => void }) {
         await workbook.xlsx.load(await file.arrayBuffer())
         const preview = workbook.worksheets.map(sheet => {
           const rows: string[][] = []
-          sheet.eachRow({ includeEmpty: false }, row => rows.push(row.values.slice(1).map(value => {
-            if (value && typeof value === 'object' && 'text' in value) return String(value.text)
-            if (value && typeof value === 'object' && 'result' in value) return String(value.result ?? '')
-            return value == null ? '' : String(value)
-          })))
+          sheet.eachRow({ includeEmpty: false }, row => {
+            const values: string[] = []
+            row.eachCell({ includeEmpty: true }, cell => {
+              const value = cell.value
+              if (value && typeof value === 'object' && 'text' in value) values.push(String(value.text))
+              else if (value && typeof value === 'object' && 'result' in value) values.push(String(value.result ?? ''))
+              else values.push(value == null ? '' : String(value))
+            })
+            rows.push(values)
+          })
           return { name: sheet.name, rows }
         })
         setSheets(preview); setActiveSheet(0); setDocLabel(file.name)

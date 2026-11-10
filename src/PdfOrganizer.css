@@ -34,3 +34,8 @@
 .pdf-text-result{border-top:1px solid #34353c;padding-top:9px;color:#ddd;font-size:11px}
 .pdf-text-result summary{cursor:pointer;color:#ffad7d}
 .pdf-text-result pre{max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0 0;padding:10px;border-radius:7px;background:#0d0e11;color:#c8c8ce;font:11px/1.5 ui-monospace,monospace}
+
+.pdf-filebar-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.pdf-view-open-button{display:flex;align-items:center;gap:7px;padding:9px 12px;border:1px solid #4a4b53;border-radius:7px;background:#24252b;color:#eee;font-size:10px;font-weight:700;white-space:nowrap}
+.pdf-view-open-button:hover{border-color:var(--orange);color:#ffad7d}
+@media(max-width:650px){.pdf-filebar-actions{flex-direction:column;align-items:stretch}.pdf-view-open-button{justify-content:center;padding:8px 9px;font-size:9px}}

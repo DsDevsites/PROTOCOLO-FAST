@@ -18,3 +18,10 @@
 .pdf-split-file-actions button:hover{border-color:#4b5563;background:#30323a;color:#fff}
 .pdf-split-file-actions .pdf-split-delete:hover{border-color:#7f1d1d;background:#451a1a;color:#fca5a5}
 @media(max-width:600px){.pdf-split-results{padding:12px 9px}.pdf-split-file-row{align-items:flex-start;flex-direction:column;gap:7px}.pdf-split-file-name{width:100%}.pdf-split-file-actions{width:100%;justify-content:flex-end}.pdf-split-results-heading{align-items:flex-start}.pdf-split-save-all{padding:9px 11px}}
+
+.pdf-split-mode-options{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px}
+.pdf-split-mode-options>label{display:flex;flex-direction:column;gap:6px;color:#aaa;font-size:11px}
+.pdf-split-mode-options select,.pdf-split-ranges{min-height:36px;min-width:230px;padding:8px 10px;border:1px solid #41424a;border-radius:7px;background:#202127;color:#eee;font-size:12px}
+.pdf-split-ranges{min-width:min(360px,100%);font-family:ui-monospace,monospace}
+.pdf-split-mode-options>span{align-self:center;color:#aaa;font-size:11px}
+@media(max-width:600px){.pdf-split-mode-options{align-items:stretch;flex-direction:column}.pdf-split-mode-options select,.pdf-split-ranges{width:100%;min-width:0}.pdf-split-mode-options>span{align-self:flex-start}}

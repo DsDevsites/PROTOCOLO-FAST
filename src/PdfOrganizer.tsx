@@ -3,9 +3,10 @@ import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib'
 import { createWorker } from 'tesseract.js'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, FilePlus2, ImagePlus, MousePointer2, RectangleHorizontal, Signature, Trash2, Type, Upload, ZoomIn, ZoomOut, RotateCcw, RotateCw, Files, Scissors, Copy, Plus, ArrowUp, ArrowDown } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, Eye, FilePlus2, ImagePlus, MousePointer2, RectangleHorizontal, Signature, Trash2, Type, Upload, ZoomIn, ZoomOut, RotateCcw, RotateCw, Files, Scissors, Copy, Plus, ArrowUp, ArrowDown } from 'lucide-react'
 import './PdfOrganizer.css'
 import PdfSplitStudio from './PdfSplitStudio'
+import PdfPageViewer from './PdfPageViewer'
 
 GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
 type Mark = { id: string; page: number; kind: 'text' | 'rect' | 'image' | 'signature'; x: number; y: number; w: number; h: number; text?: string; data?: string; color?: string; fontSize?: number }
@@ -15,6 +16,7 @@ const uid = () => globalThis.crypto?.randomUUID?.() ?? String(Date.now() + Math.
 export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [splitOpen, setSplitOpen] = useState(false)
+  const [viewerOpen, setViewerOpen] = useState(false)
   const [fileName, setFileName] = useState('')
   const [page, setPage] = useState(1)
   const [pageCount, setPageCount] = useState(0)
@@ -334,7 +336,7 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
     <section className="pdf-heading"><div className="eyebrow"><span className="pulse"/> CENTRAL DE DOCUMENTOS</div><h1>Organize. Edite.<br/><em>Finalize seus PDFs.</em></h1><p>Junte, revise, anote e personalize documentos em um único ambiente.</p></section>
     {!pdf ? <section className="pdf-upload"><div className="pdf-upload-icon"><FilePlus2 size={34}/></div><h2>Comece com um documento PDF</h2><p>Selecione um arquivo do aparelho. O processamento acontece localmente no navegador.</p><button className="action-button" onClick={() => fileRef.current?.click()}><Upload size={17}/> ABRIR PDF</button><input ref={fileRef} hidden type="file" accept="application/pdf" onChange={e => void openFile(e.target.files?.[0])}/></section> :
     <section className="pdf-workspace">
-      <div className="pdf-filebar"><div><strong>{fileName}</strong><small>{pageCount} páginas • alterações locais</small></div><button className="export-button" disabled={busy} onClick={() => void exportPdf()}><Download size={16}/> EXPORTAR PDF</button></div>
+      <div className="pdf-filebar"><div><strong>{fileName}</strong><small>{pageCount} páginas • alterações locais</small></div><div className="pdf-filebar-actions"><button className="pdf-view-open-button" onClick={() => setViewerOpen(true)}><Eye size={15}/> VISUALIZAR PDF</button><button className="export-button" disabled={busy} onClick={() => void exportPdf()}><Download size={16}/> EXPORTAR PDF</button></div></div>
       <div className="pdf-toolbar">
         <div className="tool-group">
           <button className={tool==='select'?'active':''} title="Selecionar e mover" onClick={()=>setTool('select')}><MousePointer2/></button>
@@ -380,7 +382,8 @@ export default function PdfOrganizer({ onBack }: { onBack: () => void }) {
       <div className="pdf-pager"><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}><ChevronLeft/> ANTERIOR</button><span>PÁGINA <strong>{page}</strong> DE {pageOrder.length}</span><button disabled={page>=pageOrder.length} onClick={()=>setPage(p=>p+1)}>PRÓXIMA <ChevronRight/></button></div>
       <div className="pdf-note">As anotações são adicionadas como uma nova camada. O conteúdo original do PDF é preservado; textos já gravados na página não são diretamente reescritos nesta versão.</div>
     </section>}
-    {splitOpen && pdf && <PdfSplitStudio pdf={pdf} pageOrder={pageOrder} rotations={rotations} fileName={fileName} onClose={() => setSplitOpen(false)} />}
+    {viewerOpen && pdf && <PdfPageViewer pdf={pdf} pageOrder={pageOrder} rotations={rotations} fileName={fileName} page={page} onPageChange={setPage} onRotate={direction => rotateCurrent(direction)} onSplit={() => setSplitOpen(true)} onClose={() => setViewerOpen(false)} />}
+    {splitOpen && pdf && <PdfSplitStudio pdf={pdf} pageOrder={pageOrder} rotations={rotations} fileName={fileName} initialPage={page} onClose={() => setSplitOpen(false)} />}
     {message&&<div className="notice success">{message}</div>}
     {busy&&<div className="processing">Processando documento…</div>}
     <footer><span>NEXO OPERACIONAL</span><span>ORGANIZADOR DE PDF • FERRAMENTA INDEPENDENTE</span></footer>

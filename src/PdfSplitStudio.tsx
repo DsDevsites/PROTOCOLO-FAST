@@ -10,6 +10,7 @@ type Props = {
   pageOrder: number[]
   rotations: Record<number, number>
   fileName: string
+  initialPage?: number
   onClose: () => void
 }
 
@@ -39,11 +40,12 @@ function cleanPdfName(value: string) {
   return (cleaned || 'documento') + '.pdf'
 }
 
-export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, onClose }: Props) {
+export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, initialPage = 1, onClose }: Props) {
   const previewContainerRef = useRef<HTMLDivElement>(null)
   const [previewErrors, setPreviewErrors] = useState<Record<number, string>>({})
-  const [pageMode, setPageMode] = useState(true)
-  const [cuts, setCuts] = useState<number[]>([])
+  const [splitMode, setSplitMode] = useState<'after' | 'before' | 'each' | 'ranges' | 'visual'>('after')
+  const [cuts, setCuts] = useState<number[]>(() => initialPage < pageOrder.length ? [initialPage] : [])
+  const [ranges, setRanges] = useState('1-5, 6-10, 11-20')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [parts, setParts] = useState<SplitPart[]>([])
@@ -96,11 +98,19 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
   }, [pdf, pageOrder, rotations])
 
   const cutSet = useMemo(() => new Set(cuts), [cuts])
-  const cutCount = pageMode ? Math.max(0, pageOrder.length - 1) : cuts.length
-  const outputCount = pageOrder.length ? cutCount + 1 : 0
+  const cutCount = splitMode === 'each' ? Math.max(0, pageOrder.length - 1) : splitMode === 'after' || splitMode === 'before' ? 1 : cuts.length
+  const outputCount = splitMode === 'ranges' ? ranges.split(',').filter(value => value.trim()).length : pageOrder.length ? cutCount + 1 : 0
+
+  function changeSplitMode(mode: typeof splitMode) {
+    setSplitMode(mode)
+    if (mode === 'after') setCuts(initialPage < pageOrder.length ? [initialPage] : [])
+    else if (mode === 'before') setCuts(initialPage > 1 ? [initialPage - 1] : [])
+    else if (mode === 'each' || mode === 'ranges') setCuts([])
+    else setCuts([])
+  }
 
   function toggleCut(afterPageIndex: number) {
-    setPageMode(false)
+    setSplitMode('visual')
     setCuts(current => current.includes(afterPageIndex)
       ? current.filter(value => value !== afterPageIndex)
       : [...current, afterPageIndex].sort((a, b) => a - b))
@@ -113,15 +123,35 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
     try {
       const source = await PDFDocument.load(await pdf.getData())
       const groups: number[][] = []
-      let current: number[] = []
-      pageOrder.forEach((sourcePage, index) => {
-        current.push(sourcePage)
-        const shouldCut = pageMode || cutSet.has(index + 1)
-        if (shouldCut || index === pageOrder.length - 1) {
-          groups.push(current)
-          current = []
+      if (splitMode === 'ranges') {
+        const parsed = ranges.split(',').map(value => value.trim()).filter(Boolean).map(value => {
+          const match = value.match(/^(\\d+)\\s*-\\s*(\\d+)$/)
+          if (!match) throw new Error('Intervalo inválido: ' + value + '. Use o formato 1-5, 6-10.')
+          const start = Number(match[1]), end = Number(match[2])
+          if (start < 1 || end < start || end > pageOrder.length) throw new Error('Intervalo fora dos limites: ' + value + '. O documento possui ' + pageOrder.length + ' páginas.')
+          return { start, end }
+        }).sort((a, b) => a.start - b.start)
+        if (!parsed.length) throw new Error('Informe pelo menos um intervalo de páginas.')
+        for (let index = 1; index < parsed.length; index++) {
+          if (parsed[index].start <= parsed[index - 1].end) throw new Error('Os intervalos não podem se sobrepor.')
         }
-      })
+        parsed.forEach(range => groups.push(pageOrder.slice(range.start - 1, range.end)))
+      } else {
+        const activeCuts = splitMode === 'each'
+          ? pageOrder.slice(0, -1).map((_, index) => index + 1)
+          : splitMode === 'after' ? (initialPage < pageOrder.length ? [initialPage] : [])
+          : splitMode === 'before' ? (initialPage > 1 ? [initialPage - 1] : [])
+          : cuts
+        let current: number[] = []
+        pageOrder.forEach((sourcePage, index) => {
+          current.push(sourcePage)
+          if (activeCuts.includes(index + 1) || index === pageOrder.length - 1) {
+            groups.push(current)
+            current = []
+          }
+        })
+      }
+      if (!groups.length || groups.some(group => !group.length)) throw new Error('Não foi possível identificar as partes do documento.')
       const baseName = fileName.replace(/\.pdf$/i, '') || 'documento'
       const generatedParts: SplitPart[] = []
 
@@ -224,14 +254,22 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
           {busy ? 'Processando…' : <>Dividir <b>{outputCount} PDFs</b></>}
         </button>
       </header>
-      <div className="pdf-split-options">
-        <button className={'pdf-split-mode ' + (pageMode ? 'active' : '')} onClick={() => { setPageMode(value => !value); setCuts([]) }} aria-pressed={pageMode}>
-          <span className="pdf-split-switch"><i/></span> Modo página
-        </button>
-        <span>{pageMode ? 'Cada página será salva em um PDF separado.' : 'Clique nas tesouras para marcar onde deseja separar.'}</span>
+      <div className="pdf-split-options pdf-split-mode-options">
+        <label>Forma de divisão
+          <select value={splitMode} onChange={event => changeSplitMode(event.target.value as typeof splitMode)}>
+            <option value="after">Depois da página atual ({initialPage})</option>
+            <option value="before">Antes da página atual ({initialPage})</option>
+            <option value="each">Cada página em um PDF</option>
+            <option value="ranges">Intervalos personalizados</option>
+            <option value="visual">Escolher cortes nas miniaturas</option>
+          </select>
+        </label>
+        {splitMode === 'ranges'
+          ? <input className="pdf-split-ranges" value={ranges} onChange={event => setRanges(event.target.value)} placeholder="Ex.: 1-5, 6-10, 11-20" aria-label="Intervalos de páginas"/>
+          : <span>{splitMode === 'after' ? 'Cria uma parte até a página atual e outra com as páginas restantes.' : splitMode === 'before' ? 'Cria uma parte antes da página atual e outra começando nela.' : splitMode === 'each' ? 'Cada página será salva em um PDF separado.' : 'Clique nas tesouras para marcar ou remover os pontos de corte.'}</span>}
       </div>
       <div className="pdf-split-canvas">
-        <p className="pdf-split-instruction">{pageMode ? 'Cada página será dividida em um arquivo independente' : 'Clique sobre uma tesoura para marcar ou remover uma divisão'}</p>
+        <p className="pdf-split-instruction">{splitMode === 'each' ? 'Cada página será dividida em um arquivo independente' : splitMode === 'ranges' ? 'Confira os intervalos informados antes de dividir' : 'Clique sobre uma tesoura para marcar ou remover uma divisão'}</p>
         <div className="pdf-split-pages" ref={previewContainerRef}>
           {pageOrder.map((sourcePage, index) => <div className="pdf-split-item" key={sourcePage + '-' + index}>
             <button className="pdf-split-thumbnail" onClick={() => setMessage('Página ' + (index + 1) + ' do documento')} title={'Página ' + (index + 1)}>
@@ -242,7 +280,7 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, on
               <ZoomIn className="pdf-split-zoom" size={16}/>
             </button>
             <small>Página {index + 1}</small>
-            {index < pageOrder.length - 1 && <button className={'pdf-split-cut ' + (pageMode || cutSet.has(index + 1) ? 'selected' : '')} onClick={() => toggleCut(index + 1)} title={pageMode ? 'Usar divisão personalizada a partir daqui' : 'Alternar ponto de divisão'} aria-label={'Dividir depois da página ' + (index + 1)} aria-pressed={pageMode || cutSet.has(index + 1)}>
+            {index < pageOrder.length - 1 && <button className={'pdf-split-cut ' + ((splitMode === 'each' || (splitMode === 'after' && index + 1 === initialPage) || (splitMode === 'before' && index + 1 === initialPage - 1) || cutSet.has(index + 1)) ? 'selected' : '')} onClick={() => toggleCut(index + 1)} title={splitMode === 'visual' ? 'Alternar ponto de divisão' : 'Selecionar cortes visualmente'} aria-label={'Dividir depois da página ' + (index + 1)} aria-pressed={splitMode === 'each' || cutSet.has(index + 1) || (splitMode === 'after' && index + 1 === initialPage) || (splitMode === 'before' && index + 1 === initialPage - 1)}>
               <span className="pdf-split-dotted"/>
               <span className="pdf-split-scissors"><Scissors size={17}/></span>
             </button>}

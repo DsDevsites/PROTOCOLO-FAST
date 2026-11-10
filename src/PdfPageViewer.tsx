@@ -20,7 +20,7 @@ export default function PdfPageViewer({ pdf, pageOrder, rotations, fileName, pag
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [zoom, setZoom] = useState(1)
-  const [fitMode, setFitMode] = useState<'width' | 'height' | 'free'>('fit')
+  const [fitMode, setFitMode] = useState<'fit' | 'width' | 'height' | 'free'>('fit')
   const [available, setAvailable] = useState({ width: 900, height: 700 })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')

@@ -45,7 +45,7 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, in
   const [previewErrors, setPreviewErrors] = useState<Record<number, string>>({})
   const [splitMode, setSplitMode] = useState<'after' | 'before' | 'each' | 'ranges' | 'visual'>('after')
   const [cuts, setCuts] = useState<number[]>(() => initialPage < pageOrder.length ? [initialPage] : [])
-  const [ranges, setRanges] = useState('1-5, 6-10, 11-20')
+  const [ranges, setRanges] = useState(() => pageOrder.length >= 10 ? '1-5, 6-10' : '1-' + pageOrder.length)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [parts, setParts] = useState<SplitPart[]>([])
@@ -98,7 +98,7 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, in
   }, [pdf, pageOrder, rotations])
 
   const cutSet = useMemo(() => new Set(cuts), [cuts])
-  const cutCount = splitMode === 'each' ? Math.max(0, pageOrder.length - 1) : splitMode === 'after' || splitMode === 'before' ? 1 : cuts.length
+  const cutCount = splitMode === 'each' ? Math.max(0, pageOrder.length - 1) : splitMode === 'after' ? (initialPage < pageOrder.length ? 1 : 0) : splitMode === 'before' ? (initialPage > 1 ? 1 : 0) : cuts.length
   const outputCount = splitMode === 'ranges' ? ranges.split(',').filter(value => value.trim()).length : pageOrder.length ? cutCount + 1 : 0
 
   function changeSplitMode(mode: typeof splitMode) {

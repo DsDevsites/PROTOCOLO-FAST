@@ -45,7 +45,7 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, in
   const [previewErrors, setPreviewErrors] = useState<Record<number, string>>({})
   const [splitMode, setSplitMode] = useState<'after' | 'before' | 'each' | 'ranges' | 'visual'>('after')
   const [cuts, setCuts] = useState<number[]>(() => initialPage < pageOrder.length ? [initialPage] : [])
-  const [ranges, setRanges] = useState(() => pageOrder.length >= 10 ? '1-5, 6-10' : '1-' + pageOrder.length)
+  const [ranges, setRanges] = useState(() => Array.from({ length: Math.ceil(pageOrder.length / 5) }, (_, index) => (index * 5 + 1) + '-' + Math.min((index + 1) * 5, pageOrder.length)).join(', '))
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [parts, setParts] = useState<SplitPart[]>([])
@@ -249,7 +249,7 @@ export default function PdfSplitStudio({ pdf, pageOrder, rotations, fileName, in
       <header className="pdf-split-header">
         <button className="pdf-split-back" onClick={onClose}><ArrowLeft size={17}/> Voltar ao editor</button>
         <div className="pdf-split-heading"><strong>DIVIDIR PDF</strong><span>{fileName} • {pageOrder.length} páginas</span></div>
-        <button className="pdf-split-primary" disabled={busy || pageOrder.length === 0} onClick={() => void split()}>
+        <button className="pdf-split-primary" disabled={busy || pageOrder.length === 0 || (splitMode === 'after' && initialPage >= pageOrder.length) || (splitMode === 'before' && initialPage <= 1)} onClick={() => void split()}>
           {busy ? <LoaderCircle className="pdf-split-spin" size={17}/> : <Scissors size={17}/>}
           {busy ? 'Processando…' : <>Dividir <b>{outputCount} PDFs</b></>}
         </button>
